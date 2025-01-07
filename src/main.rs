@@ -1,4 +1,4 @@
-use clap::{Args, Parser, Subcommand};
+use clap::{ArgAction, Args, Parser, Subcommand};
 use serde_derive::{Deserialize, Serialize};
 use std::io::{Read, Write};
 use std::net::TcpStream;
@@ -40,6 +40,8 @@ enum DerivCommands {
         store_hash: String,
         #[arg(long, short, default_value = "main")]
         branch: Option<String>,
+        #[clap(long, short, action = ArgAction::SetTrue)]
+        force: Option<bool>,
     },
     Ls {},
     Apply {
@@ -61,7 +63,8 @@ fn main() {
                 name,
                 store_hash,
                 branch,
-            } => handle_deriv_upload(name, store_hash, branch.clone()),
+                force,
+            } => handle_deriv_upload(name, store_hash, branch.clone(), force.clone()),
             DerivCommands::Ls {} => handle_deriv_ls(),
             DerivCommands::Apply { name, branch } => {
                 handle_deriv_apply(name.clone().unwrap(), branch.clone().unwrap())
@@ -77,6 +80,7 @@ struct Deriv {
     name: String,
     storeHash: String,
     branch: String,
+    force: Option<bool>,
 }
 fn handle_deriv_ls() {
     let mut stream = TcpStream::connect((HOST, PORT)).unwrap();
@@ -97,13 +101,17 @@ fn handle_deriv_ls() {
 }
 
 #[derive(Serialize)]
+#[allow(non_snake_case)]
 struct UploadHashAPI<'a> {
     storeHash: &'a str,
     name: &'a str,
     branch: String,
+    force: Option<bool>,
 }
-fn handle_deriv_upload(name: &str, hash: &str, branch: Option<String>) {
+fn handle_deriv_upload(name: &str, hash: &str, branch: Option<String>, force: Option<bool>) {
+    println!("Debug: {:?}", force);
     let payload = UploadHashAPI {
+        force,
         storeHash: hash,
         name,
         branch: match branch {
@@ -163,6 +171,7 @@ fn pretty_print(derivations: Vec<Deriv>) {
 fn handle_deriv_apply(name: String, branch: String) {
     let payload =
         Deriv {
+            force: None,
             id: None,
             branch,
             storeHash: "".to_owned(),
