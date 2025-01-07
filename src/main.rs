@@ -1,12 +1,12 @@
 use clap::{Args, Parser, Subcommand};
 use serde_derive::{Deserialize, Serialize};
-use std::env;
-use std::io::{self, BufRead, IsTerminal, Read, Write};
+use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
-const HOST: &str = "localhost";
+const HOST: &str = "10.100.0.1";
+// const HOST: &str = "localhost";
 const PORT: u16 = 8081;
 
 /// Gurl ☆:.｡.o(≧▽≦)o.｡.:☆
@@ -71,6 +71,7 @@ fn main() {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+#[allow(non_snake_case)]
 struct Deriv {
     id: Option<i32>,
     name: String,
