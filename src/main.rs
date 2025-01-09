@@ -1,5 +1,6 @@
 use clap::{ArgAction, Args, Parser, Subcommand};
 use serde_derive::{Deserialize, Serialize};
+use std::fs;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::Path;
@@ -83,6 +84,7 @@ struct Deriv {
     force: Option<bool>,
 }
 fn handle_deriv_ls() {
+    let current_system = fs::read_link("/run/current-system");
     let mut stream = TcpStream::connect((HOST, PORT)).unwrap();
     let request = format!(
         "GET /derivations HTTP/1.1\r\n\
@@ -97,7 +99,22 @@ fn handle_deriv_ls() {
     let derivations: Vec<Deriv> =
         serde_json::from_str(response.split("\r\n\r\n").last().unwrap_or_default()).unwrap();
 
-    pretty_print(derivations);
+    match current_system {
+        Ok(x) => match x.into_os_string().into_string() {
+            Ok(x) => pretty_print(derivations, x.as_str()),
+            Err(x) => println!(
+                "Error parsing current system's nix store hash(OsString) to String {:?}",
+                x
+            ),
+        },
+        Err(x) => {
+            println!(
+                "There was an error getting the current system's store hash: {:?}",
+                x
+            );
+            pretty_print(derivations, "");
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -145,7 +162,7 @@ fn handle_deriv_upload(name: &str, hash: &str, branch: Option<String>, force: Op
     println!("Response: {}", response);
 }
 
-fn pretty_print(derivations: Vec<Deriv>) {
+fn pretty_print(derivations: Vec<Deriv>, curr_sys: &str) {
     let mut row_lengths = (0, 0, 0);
     for der in &derivations {
         row_lengths = (
@@ -154,16 +171,27 @@ fn pretty_print(derivations: Vec<Deriv>) {
             row_lengths.2.max(der.storeHash.len()),
         );
     }
-    let (width1, width2, width3) = row_lengths;
+    let (width1, width2, width4) = row_lengths;
+    let width3 = 6;
     println!(
-        "| {:^width1$} | {:^width2$} | {:^width3$} |",
-        "Name", "Branch", "Hash"
+        "| {:^width1$} | {:^width2$} | {:^width3$} | {:^width4$} |",
+        "Name", "Branch", "", "Hash"
     );
-    println!("+-{:-^width1$}-+-{:-^width2$}-+-{:-^width3$}-+", "", "", "");
+    println!(
+        "+-{:-^width1$}-+-{:-^width2$}-+-{:-^width3$}-+-{:-^width4$}-+",
+        "", "", "", ""
+    );
     for der in derivations {
+        let mut info = "";
+        if Path::new(&der.storeHash).exists() {
+            info = "Cached";
+        }
+        if der.storeHash == curr_sys {
+            info = "Using";
+        }
         println!(
-            "| {:^width1$} | {:^width2$} | {:<width3$} |",
-            der.name, der.branch, der.storeHash
+            "| {:^width1$} | {:^width2$} | {:<width3$} | {:<width4$} |",
+            der.name, der.branch, info, der.storeHash,
         );
     }
 }
