@@ -213,17 +213,40 @@ fn handle_deriv_apply(name: String, branch: String) {
     // println!("Response: {}", &response);
     match parse_deriv_text(&response) {
         Ok(deriv) => {
-            if Path::new(&deriv.storeHash).exists() {
-                let mut cmd = Command::new("gurl-apply-helper")
+            if !Path::new(&deriv.storeHash).exists() {
+                let mut cmd = Command::new("nix")
+                    .arg("copy")
+                    .arg("--from")
+                    // .arg("ssh://root@elaina.tami.moe")
+                    .arg("https://nix-cache.tami.moe")
                     .arg(&deriv.storeHash)
                     .stdout(Stdio::inherit())
                     .stderr(Stdio::inherit())
                     .spawn()
-                    .expect("Some error with running gurl-apply-local.");
+                    .expect("Some error with running nix-copy-closure.");
+
+                // let mut cmd = Command::new("nix-copy-closure")
+                //     .arg("--gzip")
+                //     .arg("--from")
+                //     .arg("root@elaina.tami.moe")
+                //     .arg(&deriv.storeHash)
+                //     .stdout(Stdio::inherit())
+                //     .stderr(Stdio::inherit())
+                //     .spawn()
+                //     .expect("Some error with running nix-copy-closure.");
                 let status = cmd.wait();
-                println!("\n\ngurl-apply-helper exited with status {:?}", status);
-            } else {
-                todo!("fetch actual derivation from server.");
+                println!("\n\nnix-copy-closure exited with status {:?}", status);
+            }
+            let mut cmd = Command::new("gurl-apply-helper")
+                .arg(&deriv.storeHash)
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit())
+                .spawn()
+                .expect("Some error with running gurl-apply-helper.");
+            let status = cmd.wait();
+            match status {
+                Ok(x) => println!("\n\ngurl-apply-helper exited with: {:?}", x),
+                Err(x) => println!("\n\nRunning gurl-apply-helper run into an erro{:?}", x),
             }
         }
         Err(x) => println!("Error parsing response from server: {:?}", x),
