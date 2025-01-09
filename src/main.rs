@@ -1,10 +1,11 @@
 use clap::{ArgAction, Args, Parser, Subcommand};
 use serde_derive::{Deserialize, Serialize};
-use std::fs;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::time::Duration;
+use std::{array, fs};
 
 const HOST: &str = "10.100.0.1";
 // const HOST: &str = "localhost";
@@ -82,6 +83,7 @@ struct Deriv {
     storeHash: String,
     branch: String,
     force: Option<bool>,
+    dur: Option<Duration>,
 }
 fn handle_deriv_ls() {
     let current_system = fs::read_link("/run/current-system");
@@ -162,43 +164,80 @@ fn handle_deriv_upload(name: &str, hash: &str, branch: Option<String>, force: Op
     println!("Response: {}", response);
 }
 
-fn pretty_print(derivations: Vec<Deriv>, curr_sys: &str) {
-    let mut row_lengths = (0, 0, 0);
-    for der in &derivations {
-        row_lengths = (
-            row_lengths.0.max(der.name.len()),
-            row_lengths.1.max(der.branch.len()),
-            row_lengths.2.max(der.storeHash.len()),
+fn table_print<const N: usize>(mut table: Vec<Vec<String>>) {
+    let mut lengths: [usize; N] = [0; N];
+    for row in &table {
+        for i in 0..row.len() {
+            lengths[i] = lengths[i].max(row[i].len());
+        }
+    }
+    println!(
+        "| {} |",
+        table
+            .pop()
+            .unwrap()
+            .iter()
+            .enumerate()
+            .map(|(index, str)| { format!("{:^width$}", str, width = lengths[index]) })
+            .collect::<Vec<String>>()
+            .join(" | ")
+    );
+    println!(
+        "+ {} +",
+        table
+            .first()
+            .unwrap()
+            .iter()
+            .enumerate()
+            .map(|(index, _str)| { format!("{:-^width$}", "", width = lengths[index]) })
+            .collect::<Vec<String>>()
+            .join(" + ")
+    );
+    for row in table {
+        println!(
+            "| {} |",
+            row.iter()
+                .enumerate()
+                .map(|(index, str)| {
+                    if index != row.len() - 1 {
+                        format!("{:^width$}", str, width = lengths[index])
+                    } else {
+                        format!("{:<width$}", str, width = lengths[index])
+                    }
+                })
+                .collect::<Vec<String>>()
+                .join(" | ")
         );
     }
-    let (width1, width2, width4) = row_lengths;
-    let width3 = 6;
-    println!(
-        "| {:^width1$} | {:^width2$} | {:^width3$} | {:^width4$} |",
-        "Name", "Branch", "", "Hash"
-    );
-    println!(
-        "+-{:-^width1$}-+-{:-^width2$}-+-{:-^width3$}-+-{:-^width4$}-+",
-        "", "", "", ""
-    );
+}
+
+fn pretty_print(derivations: Vec<Deriv>, curr_sys: &str) {
+    let mut table: Vec<Vec<String>> = Vec::new();
     for der in derivations {
         let mut info = "";
         if Path::new(&der.storeHash).exists() {
             info = "Cached";
         }
         if der.storeHash == curr_sys {
-            info = "Using";
+            info = "Runnning";
         }
-        println!(
-            "| {:^width1$} | {:^width2$} | {:<width3$} | {:<width4$} |",
-            der.name, der.branch, info, der.storeHash,
-        );
+        table.push(vec![der.name, der.branch, info.to_owned(), der.storeHash]);
     }
+
+    table.push(vec![
+        "Name".to_owned(),
+        "Branch".to_owned(),
+        "".to_owned(),
+        "Hash".to_owned(),
+    ]);
+
+    table_print::<4>(table);
 }
 
 fn handle_deriv_apply(name: String, branch: String) {
     let payload =
         Deriv {
+            dur: None,
             force: None,
             id: None,
             branch,
