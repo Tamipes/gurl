@@ -85,22 +85,35 @@ struct Deriv {
     force: Option<bool>,
     dur: Option<Duration>,
 }
-fn handle_deriv_ls() {
-    let current_system = fs::read_link("/run/current-system");
+fn make_req(location: &str, json: Option<&str>) -> String {
     let mut stream = TcpStream::connect((HOST, PORT)).unwrap();
     let request = format!(
-        "GET /derivations HTTP/1.1\r\n\
+        "{} HTTP/1.1\r\n\
         Host: {}\r\n\
-        Connection: close\r\n\r\n",
+        Content-Type: application/json\r\n\
+        Content-Length: {}\r\n\
+        Connection: close\r\n\r\n
+        {}",
+        location,
         HOST,
+        json.unwrap_or("{}").len(),
+        json.unwrap_or("{}")
     );
+
     stream.write_all(request.as_bytes()).unwrap();
+
     let mut response = String::new();
     stream.read_to_string(&mut response).unwrap();
-    // dbg!(&response);
-    let derivations: Vec<Deriv> =
-        serde_json::from_str(response.split("\r\n\r\n").last().unwrap_or_default()).unwrap();
+    response
+        .split("\r\n\r\n")
+        .last()
+        .unwrap_or_default()
+        .to_owned()
+}
 
+fn handle_deriv_ls() {
+    let derivations = serde_json::from_str(&make_req("GET /derivations", None)).unwrap();
+    let current_system = fs::read_link("/run/current-system");
     match current_system {
         Ok(x) => match x.into_os_string().into_string() {
             Ok(x) => pretty_print(derivations, x.as_str()),
@@ -142,26 +155,10 @@ fn handle_deriv_upload(name: &str, hash: &str, branch: Option<String>, force: Op
     let json_payload =
         serde_json::to_string(&payload).expect("Failed to serialize payload to json.");
 
-    let mut stream = TcpStream::connect((HOST, PORT)).unwrap();
-
-    let request = format!(
-        "POST /derivations HTTP/1.1\r\n\
-        Host: {}\r\n\
-        Content-Type: application/json\r\n\
-        Content-Length: {}\r\n\
-        Connection: close\r\n\r\n\
-        {}",
-        HOST,
-        json_payload.len(),
-        json_payload
+    println!(
+        "Response: {}",
+        make_req("POST /derivations ", Some(json_payload.as_str()))
     );
-
-    stream.write_all(request.as_bytes()).unwrap();
-
-    let mut response = String::new();
-    stream.read_to_string(&mut response).unwrap();
-
-    println!("Response: {}", response);
 }
 
 fn table_print<const N: usize>(mut table: Vec<Vec<String>>) {
@@ -258,25 +255,7 @@ fn handle_deriv_apply(name: String, branch: String) {
     let json_payload =
         serde_json::to_string(&payload).expect("Failed to serialize payload to json.");
 
-    let mut stream = TcpStream::connect((HOST, PORT)).unwrap();
-
-    let request = format!(
-        "GET /derivations/ HTTP/1.1\r\n\
-        Host: {}\r\n\
-        Content-Type: application/json\r\n\
-        Content-Length: {}\r\n\
-        Connection: close\r\n\r\n\
-        {}",
-        HOST,
-        json_payload.len(),
-        json_payload
-    );
-
-    stream.write_all(request.as_bytes()).unwrap();
-
-    let mut response = String::new();
-    stream.read_to_string(&mut response).unwrap();
-
+    let response = make_req("GET /derivations/", Some(json_payload.as_str()));
     // println!("Response: {}", &response);
     match parse_deriv_text(&response) {
         Ok(deriv) => {
