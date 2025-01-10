@@ -46,6 +46,10 @@ enum DerivCommands {
         force: Option<bool>,
     },
     Ls {},
+    Del {
+        branch: String,
+        name: String,
+    },
     Apply {
         #[arg(long, short, default_value = "$HOSTNAME")]
         name: Option<String>,
@@ -71,8 +75,30 @@ fn main() {
             DerivCommands::Apply { name, branch } => {
                 handle_deriv_apply(name.clone().unwrap(), branch.clone().unwrap())
             }
+            DerivCommands::Del { branch, name } => handle_deriv_del(branch.clone(), name.clone()),
         },
     }
+}
+
+fn handle_deriv_del(branch: String, name: String) {
+    println!(
+        "Response: {}",
+        make_req(
+            "DELETE /derivations/",
+            Some(
+                serde_json::to_string(&Deriv {
+                    id: None,
+                    name,
+                    storeHash: "".to_owned(),
+                    branch,
+                    force: None,
+                    dur: None,
+                })
+                .unwrap()
+                .as_str(),
+            )
+        )
+    )
 }
 
 #[derive(Serialize, Deserialize, Debug)]
