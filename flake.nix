@@ -30,6 +30,24 @@
         craneLib = crane.mkLib pkgs;
         src = craneLib.cleanCargoSource ./.;
 
+        gurl-apply-helper = pkgs.writeShellScriptBin "gurl-apply-helper" ''
+          # TODO: Make the check more in depth
+          if [[ ! "$1" =~ ^/nix/store/ ]]; then
+            echo "Error: The argument does not start with /nix/store/"
+            echo "$1"
+            exit 1
+          fi
+
+          sudo nix-env --profile /nix/var/nix/profiles/system --set $1
+
+          sudo /nix/var/nix/profiles/system/bin/switch-to-configuration switch || {
+            echo
+            echo "Something went wrong... rolling back?"
+            sudo nix-env --profile /nix/var/nix/profiles/system --rollback # if something went wrong
+            exit 1
+          }
+        '';
+
         # Common arguments can be set here to avoid repeating them later
         commonArgs = {
           inherit src;
@@ -37,6 +55,7 @@
 
           buildInputs = [
             # Add additional build inputs here
+            gurl-apply-helper
           ] ++ lib.optionals pkgs.stdenv.isDarwin [
             # Additional darwin specific inputs can be set here
             pkgs.libiconv
@@ -116,6 +135,7 @@
 
         packages = {
           default = my-crate;
+          inherit gurl-apply-helper;
         } // lib.optionalAttrs (!pkgs.stdenv.isDarwin) {
           my-crate-llvm-coverage = craneLibLLvmTools.cargoLlvmCov (commonArgs // {
             inherit cargoArtifacts;
