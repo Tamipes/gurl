@@ -244,7 +244,7 @@ fn pretty_print(derivations: Vec<Deriv>, curr_sys: &str) {
             info = "Cached";
         }
         if der.storeHash == curr_sys {
-            info = "Runnning";
+            info = "Running";
         }
         table.push(vec![der.name, der.branch, info.to_owned(), der.storeHash]);
     }
