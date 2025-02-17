@@ -183,54 +183,56 @@ fn handle_deriv_upload(name: &str, hash: &str, branch: Option<String>, force: Op
 
     println!(
         "Response: {}",
-        make_req("POST /derivations ", Some(json_payload.as_str()))
+        make_req("POST /derivations", Some(json_payload.as_str()))
     );
 }
 
+// TODO: Add fix this term_lenght thingy...
 fn table_print<const N: usize>(mut table: Vec<Vec<String>>) {
+    let termsize::Size { rows, cols } = termsize::get().unwrap();
+    let term_width = (cols - 4).into();
     let mut lengths: [usize; N] = [0; N];
     for row in &table {
         for i in 0..row.len() {
             lengths[i] = lengths[i].max(row[i].len());
         }
     }
-    println!(
-        "| {} |",
-        table
-            .pop()
-            .unwrap()
-            .iter()
-            .enumerate()
-            .map(|(index, str)| { format!("{:^width$}", str, width = lengths[index]) })
-            .collect::<Vec<String>>()
-            .join(" | ")
-    );
-    println!(
-        "+ {} +",
-        table
-            .first()
-            .unwrap()
-            .iter()
-            .enumerate()
-            .map(|(index, _str)| { format!("{:-^width$}", "", width = lengths[index]) })
-            .collect::<Vec<String>>()
-            .join(" + ")
-    );
+    let mut head_line = table
+        .pop()
+        .unwrap()
+        .iter()
+        .enumerate()
+        .map(|(index, str)| format!("{:^width$}", str, width = lengths[index]))
+        .collect::<Vec<String>>()
+        .join(" | ");
+    head_line.truncate(term_width);
+    println!("| {} |", head_line);
+
+    let mut info_line = table
+        .first()
+        .unwrap()
+        .iter()
+        .enumerate()
+        .map(|(index, _str)| format!("{:-^width$}", "", width = lengths[index]))
+        .collect::<Vec<String>>()
+        .join(" + ");
+    info_line.truncate(term_width);
+    println!("+ {} +", info_line);
     for row in table {
-        println!(
-            "| {} |",
-            row.iter()
-                .enumerate()
-                .map(|(index, str)| {
-                    if index != row.len() - 1 {
-                        format!("{:^width$}", str, width = lengths[index])
-                    } else {
-                        format!("{:<width$}", str, width = lengths[index])
-                    }
-                })
-                .collect::<Vec<String>>()
-                .join(" | ")
-        );
+        let mut data_line = row
+            .iter()
+            .enumerate()
+            .map(|(index, str)| {
+                if index != row.len() - 1 {
+                    format!("{:^width$}", str, width = lengths[index])
+                } else {
+                    format!("{:<width$}", str, width = lengths[index])
+                }
+            })
+            .collect::<Vec<String>>()
+            .join(" | ");
+        data_line.truncate(term_width);
+        println!("| {} |", data_line);
     }
 }
 
@@ -318,7 +320,7 @@ fn handle_deriv_apply(name: String, branch: String) {
             let status = cmd.wait();
             match status {
                 Ok(x) => println!("\n\ngurl-apply-helper exited with: {:?}", x),
-                Err(x) => println!("\n\nRunning gurl-apply-helper run into an erro{:?}", x),
+                Err(x) => println!("\n\nRunning gurl-apply-helper run into an error{:?}", x),
             }
         }
         Err(x) => println!("Error parsing response from server: {:?}", x),

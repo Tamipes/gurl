@@ -11,4 +11,5 @@ serde = "1.0"
 serde_json = "1.0"
 serde_derive = "1.0"
 clap = { version = "4.5.23", features = ["derive"] }
-
+termsize = "0.1"
+# https://stackoverflow.com/questions/58892528/get-console-width-in-rust

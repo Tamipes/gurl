@@ -159,5 +159,6 @@
             my-crate
           ];
         };
+        meta.mainProgram = my-crate;
       });
 }
