@@ -1,4 +1,4 @@
-use chrono::{Local, TimeDelta, Utc};
+use chrono::{DateTime, Local, TimeDelta, Utc};
 use clap::{ArgAction, Args, Parser, Subcommand};
 use serde_derive::{Deserialize, Serialize};
 use std::io::{Read, Write};
@@ -110,7 +110,7 @@ struct Deriv {
     storeHash: String,
     branch: String,
     force: Option<bool>,
-    date_added: Option<chrono::DateTime<Local>>,
+    date_added: Option<DateTime<Local>>,
 }
 fn make_req(location: &str, json: Option<&str>) -> String {
     let mut stream = TcpStream::connect((HOST, PORT)).unwrap();
@@ -166,24 +166,16 @@ struct UploadHashAPI<'a> {
     name: &'a str,
     branch: String,
     force: Option<bool>,
-    date: String,
+    date_added: DateTime<Local>,
 }
 fn handle_deriv_upload(name: &str, hash: &str, branch: Option<String>, force: Option<bool>) {
-    let date = String::from_utf8_lossy(
-        &Command::new("date")
-            .arg("--rfc-3339=seconds")
-            .output()
-            .expect("Failed to execute `date`")
-            .stdout
-            .trim_ascii_end(),
-    )
-    .into_owned();
+    let date_added = Local::now();
 
     let payload = UploadHashAPI {
         force,
         storeHash: hash,
         name,
-        date,
+        date_added,
         branch: match branch {
             Some(x) => x,
             None => "main".to_owned(),
