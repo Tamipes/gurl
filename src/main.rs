@@ -1,3 +1,4 @@
+use chrono::{Local, TimeDelta, Utc};
 use clap::{ArgAction, Args, Parser, Subcommand};
 use serde_derive::{Deserialize, Serialize};
 use std::io::{Read, Write};
@@ -92,7 +93,7 @@ fn handle_deriv_del(branch: String, name: String) {
                     storeHash: "".to_owned(),
                     branch,
                     force: None,
-                    dur: None,
+                    date_added: None
                 })
                 .unwrap()
                 .as_str(),
@@ -109,7 +110,7 @@ struct Deriv {
     storeHash: String,
     branch: String,
     force: Option<bool>,
-    dur: Option<Duration>,
+    date_added: Option<chrono::DateTime<Local>>,
 }
 fn make_req(location: &str, json: Option<&str>) -> String {
     let mut stream = TcpStream::connect((HOST, PORT)).unwrap();
@@ -165,13 +166,24 @@ struct UploadHashAPI<'a> {
     name: &'a str,
     branch: String,
     force: Option<bool>,
+    date: String,
 }
 fn handle_deriv_upload(name: &str, hash: &str, branch: Option<String>, force: Option<bool>) {
-    println!("Debug: {:?}", force);
+    let date = String::from_utf8_lossy(
+        &Command::new("date")
+            .arg("--rfc-3339=seconds")
+            .output()
+            .expect("Failed to execute `date`")
+            .stdout
+            .trim_ascii_end(),
+    )
+    .into_owned();
+
     let payload = UploadHashAPI {
         force,
         storeHash: hash,
         name,
+        date,
         branch: match branch {
             Some(x) => x,
             None => "main".to_owned(),
@@ -246,23 +258,33 @@ fn pretty_print(derivations: Vec<Deriv>, curr_sys: &str) {
         if der.storeHash == curr_sys {
             info = "Running";
         }
-        table.push(vec![der.name, der.branch, info.to_owned(), der.storeHash]);
+        table.push(vec![
+            der.name,
+            der.branch,
+            info.to_owned(),
+            match der.date_added {
+                Some(x) => x.naive_local().to_string(),
+                None => "".to_owned(),
+            },
+            der.storeHash,
+        ]);
     }
 
     table.push(vec![
         "Name".to_owned(),
         "Branch".to_owned(),
         "".to_owned(),
+        "Date Added".to_owned(),
         "Hash".to_owned(),
     ]);
 
-    table_print::<4>(table);
+    table_print::<5>(table);
 }
 
 fn handle_deriv_apply(name: String, branch: String) {
     let payload =
         Deriv {
-            dur: None,
+            date_added: None,
             force: None,
             id: None,
             branch,
