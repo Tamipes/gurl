@@ -389,6 +389,8 @@ fn handle_deriv_apply(name: String, branch: String) {
     // println!("Response: {}", &response);
     match parse_deriv_text(&response) {
         Ok(deriv) => {
+            let password = rpassword::prompt_password("[sudo] password for later: ").unwrap();
+            println!("");
             if !Path::new(&deriv.storeHash).exists() {
                 let mut cmd = Command::new("nix")
                     .arg("copy")
@@ -413,12 +415,15 @@ fn handle_deriv_apply(name: String, branch: String) {
                 let status = cmd.wait();
                 println!("\n\nnix-copy-closure exited with status {:?}", status);
             }
-            let mut cmd = Command::new("gurl-apply-helper")
-                .arg(&deriv.storeHash)
+            let mut cmd = Command::new("sudo")
+                .args(vec!["-S", "gurl-apply-helper", &deriv.storeHash])
+                .stdin(Stdio::piped())
                 .stdout(Stdio::inherit())
                 .stderr(Stdio::inherit())
                 .spawn()
                 .expect("Some error with running gurl-apply-helper.");
+            let mut stdin = cmd.stdin.take().expect("Failed to open stdin");
+            std::thread::spawn(move || stdin.write_all(password.as_bytes()));
             let status = cmd.wait();
             match status {
                 Ok(x) => println!("\n\ngurl-apply-helper exited with: {:?}", x),

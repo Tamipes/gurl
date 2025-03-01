@@ -14,4 +14,5 @@ clap = { version = "4.5.23", features = ["derive"] }
 termsize = "0.1"
 chrono = { version = "0.4.40", features = [ "serde" ] }
 colored = "3.0.0"
+rpassword = "7.3.1"
 # https://stackoverflow.com/questions/58892528/get-console-width-in-rust
