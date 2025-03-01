@@ -1,6 +1,9 @@
-use chrono::{DateTime, Local, TimeDelta, Utc};
+use chrono::{DateTime, Datelike, Local, TimeDelta, Utc};
 use clap::{ArgAction, Args, Parser, Subcommand};
+use colored::{ColoredString, Colorize};
+use core::fmt;
 use serde_derive::{Deserialize, Serialize};
+use std::fmt::Debug;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::Path;
@@ -192,7 +195,7 @@ fn handle_deriv_upload(name: &str, hash: &str, branch: Option<String>, force: Op
 }
 
 // TODO: Add fix this term_lenght thingy...
-fn table_print<const N: usize>(mut table: Vec<Vec<String>>) {
+fn table_print<const N: usize>(mut table: Vec<Vec<Fonal>>) {
     let termsize::Size { rows, cols } = termsize::get().unwrap();
     let term_width = (cols - 4).into();
     let mut lengths: [usize; N] = [0; N];
@@ -206,7 +209,7 @@ fn table_print<const N: usize>(mut table: Vec<Vec<String>>) {
         .unwrap()
         .iter()
         .enumerate()
-        .map(|(index, str)| format!("{:^width$}", str, width = lengths[index]))
+        .map(|(index, str)| format!("{:^width$}", str.to_string(), width = lengths[index]))
         .collect::<Vec<String>>()
         .join(" | ");
     head_line.truncate(term_width);
@@ -222,26 +225,87 @@ fn table_print<const N: usize>(mut table: Vec<Vec<String>>) {
         .join(" + ");
     info_line.truncate(term_width);
     println!("+ {} +", info_line);
+    let mut line_diff = 0;
     for row in table {
         let mut data_line = row
             .iter()
             .enumerate()
             .map(|(index, str)| {
                 if index != row.len() - 1 {
-                    format!("{:^width$}", str, width = lengths[index])
+                    let mut fooon = ColoredString::from(format!(
+                        "{:^width$}",
+                        str.inner(),
+                        width = lengths[index]
+                    ));
+                    if str.fgcolor().is_some() {
+                        fooon.fgcolor = str.fgcolor();
+                        line_diff = 7;
+                    }
+                    fooon.to_string()
                 } else {
-                    format!("{:<width$}", str, width = lengths[index])
+                    format!("{:<width$}", str.to_string(), width = lengths[index])
                 }
             })
             .collect::<Vec<String>>()
             .join(" | ");
-        data_line.truncate(term_width);
+        data_line.truncate(term_width + line_diff);
+        line_diff = 0;
         println!("| {} |", data_line);
     }
 }
 
+enum Fonal {
+    String(String),
+    ColoredString(ColoredString),
+}
+impl Fonal {
+    fn len(&self) -> usize {
+        match self {
+            Fonal::String(s) => s.len(),
+            Fonal::ColoredString(cs) => cs.input.len(),
+        }
+    }
+    fn inner(&self) -> String {
+        match self {
+            Fonal::String(s) => s.clone(),
+            Fonal::ColoredString(colored_string) => colored_string.input.to_owned(),
+        }
+    }
+    fn style(&self) -> colored::Style {
+        match self {
+            Fonal::String(_) => colored::Style::default(),
+            Fonal::ColoredString(colored_string) => colored_string.style,
+        }
+    }
+    fn fgcolor(&self) -> Option<colored::Color> {
+        match self {
+            Fonal::String(_) => None,
+            Fonal::ColoredString(colored_string) => colored_string.fgcolor,
+        }
+    }
+}
+impl From<String> for Fonal {
+    fn from(value: String) -> Self {
+        Fonal::String(value)
+    }
+}
+
+impl From<ColoredString> for Fonal {
+    fn from(value: ColoredString) -> Self {
+        Fonal::ColoredString(value)
+    }
+}
+impl ToString for Fonal {
+    fn to_string(&self) -> String {
+        match self {
+            Fonal::String(s) => s.clone(),
+            Fonal::ColoredString(cs) => cs.to_string(),
+        }
+    }
+}
+
 fn pretty_print(derivations: Vec<Deriv>, curr_sys: &str) {
-    let mut table: Vec<Vec<String>> = Vec::new();
+    let mut table: Vec<Vec<Fonal>> = Vec::new();
     for der in derivations {
         let mut info = "";
         if Path::new(&der.storeHash).exists() {
@@ -251,26 +315,50 @@ fn pretty_print(derivations: Vec<Deriv>, curr_sys: &str) {
             info = "Running";
         }
         table.push(vec![
-            der.name,
-            der.branch,
-            info.to_owned(),
-            match der.date_added {
-                Some(x) => x.naive_local().to_string(),
-                None => "".to_owned(),
-            },
-            der.storeHash,
+            der.name.into(),
+            der.branch.into(),
+            info.to_owned().into(),
+            handle_date_to_dynamic_info(der.date_added).into(),
+            der.storeHash.into(),
         ]);
     }
 
     table.push(vec![
-        "Name".to_owned(),
-        "Branch".to_owned(),
-        "".to_owned(),
-        "Date Added".to_owned(),
-        "Hash".to_owned(),
+        Fonal::String("Name".to_owned()),
+        Fonal::String("Branch".to_owned()),
+        Fonal::String("".to_owned()),
+        Fonal::String("Date Added".to_owned()),
+        Fonal::String("Hash".to_owned()),
     ]);
 
     table_print::<5>(table);
+}
+
+// This function should
+fn handle_date_to_dynamic_info(date: Option<DateTime<Local>>) -> ColoredString {
+    match date {
+        Some(old) => {
+            let now = Local::now();
+            let dur = (now - old);
+            if (dur.num_seconds() < 60) {
+                return format!("{} seconds", dur.num_seconds()).green();
+            }
+            if (dur.num_minutes() < 60) {
+                return format!("{} minutes", dur.num_minutes()).green();
+            }
+            if (dur.num_hours() < 24) {
+                return format!("{} hours", dur.num_hours()).bright_yellow();
+            }
+            if (dur.num_days() < 7) {
+                return format!("{} days", dur.num_days()).yellow();
+            }
+            if (dur.num_days() < 30) {
+                return format!("{} days", dur.num_days()).red();
+            }
+            old.naive_local().to_string().red()
+        }
+        None => ColoredString::from("---".to_owned()),
+    }
 }
 
 fn handle_deriv_apply(name: String, branch: String) {
