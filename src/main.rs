@@ -30,12 +30,19 @@ enum Commands {
     /// Configure gc roots derivations on server or apply them
     // #[clap(alias = "derivations")]
     Deriv(DerivArgs),
+    /// Sudo, but request the password visually using rofi -dmenu -password; this might not be a safe idea tho
+    Sudo(SudoArgs),
 }
 
 #[derive(Args)]
 struct DerivArgs {
     #[command(subcommand)]
     command: DerivCommands,
+}
+#[derive(Args)]
+struct SudoArgs {
+    /// The program to run with sudo
+    program: String,
 }
 
 #[derive(Subcommand)]
@@ -81,6 +88,29 @@ fn main() {
             }
             DerivCommands::Del { branch, name } => handle_deriv_del(branch.clone(), name.clone()),
         },
+        Commands::Sudo(sudo_args) => {
+            let password = String::from_utf8_lossy(
+                Command::new("rofi")
+                    .args(vec!["-dmenu", "-password", "-p", "Pass: "])
+                    .output()
+                    .expect("Failed to spawn rofi")
+                    .stdout
+                    .trim_ascii_end(),
+            )
+            .into_owned();
+
+            let mut child = Command::new("sudo")
+                .args(vec!["-S", &sudo_args.program])
+                .stdin(Stdio::piped())
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit())
+                .spawn()
+                .expect("Failed to spawn application");
+            let mut stdin = child.stdin.take().expect("Failed to open stdin");
+            std::thread::spawn(move || stdin.write_all(password.as_bytes()));
+            let status = child.wait();
+            dbg!(status);
+        }
     }
 }
 
