@@ -56,6 +56,7 @@
           buildInputs = [
             # Add additional build inputs here
             gurl-apply-helper
+            pkgs.rofi
           ] ++ lib.optionals pkgs.stdenv.isDarwin [
             # Additional darwin specific inputs can be set here
             pkgs.libiconv
