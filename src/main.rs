@@ -269,9 +269,10 @@ fn table_print<const N: usize>(mut table: Vec<Vec<Fonal>>) {
                     ));
                     if str.fgcolor().is_some() {
                         fooon.fgcolor = str.fgcolor();
-                        line_diff = 9;
                     }
-                    fooon.to_string()
+                    let end_str = fooon.to_string();
+                    line_diff = end_str.len() - fooon.input.len();
+                    return end_str;
                 } else {
                     format!("{:<width$}", str.to_string(), width = lengths[index])
                 }
