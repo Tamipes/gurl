@@ -269,7 +269,7 @@ fn table_print<const N: usize>(mut table: Vec<Vec<Fonal>>) {
                     ));
                     if str.fgcolor().is_some() {
                         fooon.fgcolor = str.fgcolor();
-                        line_diff = 7;
+                        line_diff = 9;
                     }
                     fooon.to_string()
                 } else {
