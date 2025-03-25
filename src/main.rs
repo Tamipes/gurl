@@ -1,15 +1,13 @@
-use chrono::{DateTime, Datelike, Local, TimeDelta, Utc};
+use chrono::{DateTime, Local};
 use clap::{ArgAction, Args, Parser, Subcommand};
 use colored::{ColoredString, Colorize};
-use core::fmt;
 use serde_derive::{Deserialize, Serialize};
 use std::fmt::Debug;
+use std::fs;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::Path;
 use std::process::{Command, Stdio};
-use std::time::Duration;
-use std::{array, fs};
 
 const HOST: &str = "10.100.0.1";
 // const HOST: &str = "localhost";
@@ -177,16 +175,16 @@ fn handle_deriv_ls() {
     match current_system {
         Ok(x) => match x.into_os_string().into_string() {
             Ok(x) => pretty_print(derivations, x.as_str()),
-            Err(x) => println!(
-                "Error parsing current system's nix store hash(OsString) to String {:?}",
-                x
-            ),
+            Err(x) => {
+                println!(
+                    "Error parsing current system's nix store hash(OsString) to String {:?}",
+                    x
+                );
+                pretty_print(derivations, "");
+            }
         },
         Err(x) => {
-            println!(
-                "There was an error getting the current system's store hash: {:?}",
-                x
-            );
+            println!("Error getting the current system's store hash: {:?}", x);
             pretty_print(derivations, "");
         }
     }
@@ -226,7 +224,7 @@ fn handle_deriv_upload(name: &str, hash: &str, branch: Option<String>, force: Op
 
 // TODO: Add fix this term_lenght thingy...
 fn table_print<const N: usize>(mut table: Vec<Vec<Fonal>>) {
-    let termsize::Size { rows, cols } = termsize::get().unwrap();
+    let termsize::Size { rows: _, cols } = termsize::get().unwrap();
     let term_width = (cols - 4).into();
     let mut lengths: [usize; N] = [0; N];
     for row in &table {
@@ -370,20 +368,20 @@ fn handle_date_to_dynamic_info(date: Option<DateTime<Local>>) -> ColoredString {
     match date {
         Some(old) => {
             let now = Local::now();
-            let dur = (now - old);
-            if (dur.num_seconds() < 60) {
+            let dur = now - old;
+            if dur.num_seconds() < 60 {
                 return format!("{} seconds", dur.num_seconds()).green();
             }
-            if (dur.num_minutes() < 60) {
+            if dur.num_minutes() < 60 {
                 return format!("{} minutes", dur.num_minutes()).green();
             }
-            if (dur.num_hours() < 24) {
+            if dur.num_hours() < 24 {
                 return format!("{} hours", dur.num_hours()).bright_yellow();
             }
-            if (dur.num_days() < 7) {
+            if dur.num_days() < 7 {
                 return format!("{} days", dur.num_days()).yellow();
             }
-            if (dur.num_days() < 30) {
+            if dur.num_days() < 30 {
                 return format!("{} days", dur.num_days()).red();
             }
             old.naive_local().to_string().red()
