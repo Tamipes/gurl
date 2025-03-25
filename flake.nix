@@ -44,6 +44,7 @@
             echo
             echo "Something went wrong... rolling back?"
             sudo nix-env --profile /nix/var/nix/profiles/system --rollback # if something went wrong
+            sudo /nix/var/nix/profiles/system/bin/switch-to-configuration switch
             exit 1
           }
         '';
