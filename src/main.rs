@@ -431,50 +431,47 @@ fn handle_deriv_apply(name: String, branch: String) {
         .text()
         .unwrap();
 
-    match parse_deriv_text(&response) {
-        Ok(deriv) => {
-            let password = rpassword::prompt_password("[sudo] password for later: ").unwrap();
-            println!("");
-            if !Path::new(&deriv.storeHash).exists() {
-                let mut cmd = Command::new("nix")
-                    .arg("copy")
-                    .arg("--from")
-                    // .arg("ssh://root@elaina.tami.moe")
-                    .arg("https://nix-cache.tami.moe")
-                    .arg(&deriv.storeHash)
-                    .stdout(Stdio::inherit())
-                    .stderr(Stdio::inherit())
-                    .spawn()
-                    .expect("Some error with running nix-copy-closure.");
+    let deriv: Deriv = serde_json::from_str(&response).unwrap();
 
-                // let mut cmd = Command::new("nix-copy-closure")
-                //     .arg("--gzip")
-                //     .arg("--from")
-                //     .arg("root@elaina.tami.moe")
-                //     .arg(&deriv.storeHash)
-                //     .stdout(Stdio::inherit())
-                //     .stderr(Stdio::inherit())
-                //     .spawn()
-                //     .expect("Some error with running nix-copy-closure.");
-                let status = cmd.wait();
-                println!("\n\nnix-copy-closure exited with status {:?}", status);
-            }
-            let mut cmd = Command::new("sudo")
-                .args(vec!["-S", "gurl-apply-helper", &deriv.storeHash])
-                .stdin(Stdio::piped())
-                .stdout(Stdio::inherit())
-                .stderr(Stdio::inherit())
-                .spawn()
-                .expect("Some error with running gurl-apply-helper.");
-            let mut stdin = cmd.stdin.take().expect("Failed to open stdin");
-            std::thread::spawn(move || stdin.write_all(password.as_bytes()));
-            let status = cmd.wait();
-            match status {
-                Ok(x) => println!("\n\ngurl-apply-helper exited with: {:?}", x),
-                Err(x) => println!("\n\nRunning gurl-apply-helper run into an error{:?}", x),
-            }
-        }
-        Err(x) => println!("Error parsing response from server: {:?}", x),
+    let password = rpassword::prompt_password("[sudo] password for later: ").unwrap();
+    println!("");
+    if !Path::new(&deriv.storeHash).exists() {
+        let mut cmd = Command::new("nix")
+            .arg("copy")
+            .arg("--from")
+            // .arg("ssh://root@elaina.tami.moe")
+            .arg("https://nix-cache.tami.moe")
+            .arg(&deriv.storeHash)
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .expect("Some error with running nix-copy-closure.");
+
+        // let mut cmd = Command::new("nix-copy-closure")
+        //     .arg("--gzip")
+        //     .arg("--from")
+        //     .arg("root@elaina.tami.moe")
+        //     .arg(&deriv.storeHash)
+        //     .stdout(Stdio::inherit())
+        //     .stderr(Stdio::inherit())
+        //     .spawn()
+        //     .expect("Some error with running nix-copy-closure.");
+        let status = cmd.wait();
+        println!("\n\nnix-copy-closure exited with status {:?}", status);
+    }
+    let mut cmd = Command::new("sudo")
+        .args(vec!["-S", "gurl-apply-helper", &deriv.storeHash])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .expect("Some error with running gurl-apply-helper.");
+    let mut stdin = cmd.stdin.take().expect("Failed to open stdin");
+    std::thread::spawn(move || stdin.write_all(password.as_bytes()));
+    let status = cmd.wait();
+    match status {
+        Ok(x) => println!("\n\ngurl-apply-helper exited with: {:?}", x),
+        Err(x) => println!("\n\nRunning gurl-apply-helper run into an error{:?}", x),
     }
 }
 
