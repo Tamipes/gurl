@@ -57,9 +57,13 @@
             # Add additional build inputs here
             gurl-apply-helper
             pkgs.rofi
+            pkgs.openssl
           ] ++ lib.optionals pkgs.stdenv.isDarwin [
             # Additional darwin specific inputs can be set here
             pkgs.libiconv
+          ];
+          nativeBuildInputs = [
+            pkgs.pkg-config
           ];
 
           # Additional environment variables can be set directly
@@ -158,6 +162,7 @@
           packages = [
             pkgs.rust-analyzer
             my-crate
+            pkgs.pkg-config
           ];
         };
         meta.mainProgram = my-crate;
