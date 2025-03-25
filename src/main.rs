@@ -9,9 +9,11 @@ use std::net::TcpStream;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
-const HOST: &str = "10.100.0.1";
+const PRIV_HOST: &str = "10.100.0.1";
 // const HOST: &str = "localhost";
-const PORT: u16 = 8081;
+const PRIV_PORT: u16 = 8081;
+
+const PUB_HOST: &str = "https://api.tami.moe";
 
 /// Gurl ☆:.｡.o(≧▽≦)o.｡.:☆
 #[derive(Parser)]
@@ -144,7 +146,7 @@ struct Deriv {
     date_added: Option<DateTime<Local>>,
 }
 fn make_req(location: &str, json: Option<&str>) -> String {
-    let mut stream = TcpStream::connect((HOST, PORT)).unwrap();
+    let mut stream = TcpStream::connect((PRIV_HOST, PRIV_PORT)).unwrap();
     let request = format!(
         "{} HTTP/1.1\r\n\
         Host: {}\r\n\
@@ -153,7 +155,7 @@ fn make_req(location: &str, json: Option<&str>) -> String {
         Connection: close\r\n\r\n
         {}",
         location,
-        HOST,
+        PRIV_HOST,
         json.unwrap_or("{}").len(),
         json.unwrap_or("{}")
     );
@@ -170,7 +172,13 @@ fn make_req(location: &str, json: Option<&str>) -> String {
 }
 
 fn handle_deriv_ls() {
-    let derivations = serde_json::from_str(&make_req("GET /derivations", None)).unwrap();
+    let derivations = serde_json::from_str(
+        &reqwest::blocking::get(format!("{PUB_HOST}/derivations"))
+            .unwrap()
+            .text()
+            .unwrap(),
+    )
+    .unwrap();
     let current_system = fs::read_link("/run/current-system");
     match current_system {
         Ok(x) => match x.into_os_string().into_string() {
@@ -414,8 +422,15 @@ fn handle_deriv_apply(name: String, branch: String) {
     let json_payload =
         serde_json::to_string(&payload).expect("Failed to serialize payload to json.");
 
-    let response = make_req("GET /derivations/", Some(json_payload.as_str()));
-    // println!("Response: {}", &response);
+    let client = reqwest::blocking::Client::new();
+    let response = client
+        .get(format!("{PUB_HOST}/derivations/"))
+        .body(json_payload)
+        .send()
+        .unwrap()
+        .text()
+        .unwrap();
+
     match parse_deriv_text(&response) {
         Ok(deriv) => {
             let password = rpassword::prompt_password("[sudo] password for later: ").unwrap();
