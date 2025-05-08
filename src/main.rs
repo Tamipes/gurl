@@ -433,7 +433,7 @@ fn handle_date_to_dynamic_info(date: Option<DateTime<Local>>) -> ColoredString {
             if dur.num_days() < 30 {
                 return format!("{} days", dur.num_days()).red();
             }
-            old.naive_local().to_string().red()
+            old.naive_local().format("%Y-%m-%d %H:%M").to_string().red()
         }
         None => ColoredString::from("---".to_owned()),
     }
