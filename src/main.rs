@@ -99,18 +99,59 @@ fn main() {
             )
             .into_owned();
 
-            let mut child = Command::new("sudo")
+            let mut child = match Command::new("sudo")
                 .args(vec!["-S", &sudo_args.program])
                 .stdin(Stdio::piped())
                 .stdout(Stdio::inherit())
                 .stderr(Stdio::inherit())
                 .spawn()
-                .expect("Failed to spawn application");
+            {
+                Ok(x) => x,
+                Err(_) => {
+                    return visual_println(
+                        "Failed to start application with sudo?\nMaybe sudo is not installed"
+                            .to_owned(),
+                    )
+                    .unwrap()
+                }
+            };
+
             let mut stdin = child.stdin.take().expect("Failed to open stdin");
-            std::thread::spawn(move || stdin.write_all(password.as_bytes()));
+            let handle = std::thread::spawn(move || {
+                stdin
+                    .write_all(password.as_bytes())
+                    .expect("Failed to write to sudo child process!")
+            });
             let status = child.wait();
-            dbg!(status);
+            match status {
+                Ok(exitStatus) => {
+                    if !exitStatus.success() {
+                        visual_println("Bad password!\n(exit with failure!)".to_owned()).unwrap();
+                    }
+                }
+                Err(_) => visual_println("Failed to start program!".to_owned()).unwrap(),
+            }
         }
+    }
+}
+fn visual_println(s: String) -> Option<()> {
+    let mut child = match Command::new("rofi")
+        .arg("-dmenu")
+        .stdin(Stdio::piped())
+        .spawn()
+    {
+        Ok(x) => x,
+        Err(_) => return None,
+    };
+    let mut stdin = child.stdin.take().expect("Failed to open stdin");
+    let handle = std::thread::spawn(move || {
+        stdin
+            .write_all(s.as_bytes())
+            .expect("Error: Failed to write to child process!")
+    });
+    match handle.join() {
+        Ok(_) => Some(()),
+        Err(_) => None,
     }
 }
 
