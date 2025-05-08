@@ -459,7 +459,7 @@ fn handle_deriv_apply(name: String, branch: String) {
                 name
             },
         };
-    // println!("{:?}",payload.);
+    println!("INFO: name set as: {}", payload.name);
     let json_payload =
         serde_json::to_string(&payload).expect("Failed to serialize payload to json.");
 
@@ -474,8 +474,13 @@ fn handle_deriv_apply(name: String, branch: String) {
 
     let deriv: Deriv = serde_json::from_str(&response).unwrap();
 
+    println!("INFO: this will be installed:");
+    println!("\tname: {}", deriv.name);
+    println!("\tbranch: {}", deriv.branch);
+    println!("\thash: {}", deriv.storeHash);
+    println!("\tdate: {}", handle_date_to_dynamic_info(deriv.date_added));
+
     let password = rpassword::prompt_password("[sudo] password for later: ").unwrap();
-    println!("");
     if !Path::new(&deriv.storeHash).exists() {
         let mut cmd = Command::new("nix")
             .arg("copy")
@@ -498,7 +503,20 @@ fn handle_deriv_apply(name: String, branch: String) {
         //     .spawn()
         //     .expect("Some error with running nix-copy-closure.");
         let status = cmd.wait();
-        println!("\n\nnix-copy-closure exited with status {:?}", status);
+        match status {
+            Ok(exit_status) => {
+                if exit_status.success() {
+                    println!("INFO: Closure has finished copying")
+                } else {
+                    println!("ERROR: Error during closure copy!");
+                    return;
+                }
+            }
+            Err(_) => {
+                println!("ERROR: Failed to start closure copy!");
+                return;
+            }
+        };
     }
     let mut cmd = Command::new("sudo")
         .args(vec!["-S", "gurl-apply-helper", &deriv.storeHash])
@@ -511,8 +529,14 @@ fn handle_deriv_apply(name: String, branch: String) {
     std::thread::spawn(move || stdin.write_all(password.as_bytes()));
     let status = cmd.wait();
     match status {
-        Ok(x) => println!("\n\ngurl-apply-helper exited with: {:?}", x),
-        Err(x) => println!("\n\nRunning gurl-apply-helper run into an error{:?}", x),
+        Ok(exit_status) => {
+            if exit_status.success() {
+                println!("INFO: Succesfully instaleld the closure!");
+            } else {
+                println!("ERROR: Failed during closure install!")
+            }
+        }
+        Err(x) => println!("ERROR: Failed to start gurl-apply-helper!"),
     }
 }
 
