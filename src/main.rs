@@ -524,14 +524,14 @@ fn handle_deriv_apply(name: String, branch: String) {
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .spawn()
-        .expect("Some error with running gurl-apply-helper.");
+        .expect("Some error with starting gurl-apply-helper.");
     let mut stdin = cmd.stdin.take().expect("Failed to open stdin");
     std::thread::spawn(move || stdin.write_all(password.as_bytes()));
     let status = cmd.wait();
     match status {
         Ok(exit_status) => {
             if exit_status.success() {
-                println!("INFO: Succesfully instaleld the closure!");
+                println!("INFO: {}", "Successfully instaleld the closure!".green());
             } else {
                 println!("ERROR: Failed during closure install!")
             }
