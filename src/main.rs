@@ -57,8 +57,11 @@ enum DerivCommands {
         force: Option<bool>,
     },
     Ls {},
+    /// Delete the given name on a given branch.
+    /// Use "_" to mean all of a given argument. | gurl deriv del auto-merge _
     Del {
         branch: String,
+        #[clap(default_value = "_")]
         name: String,
     },
     Apply {
@@ -156,24 +159,48 @@ fn visual_println(s: String) -> Option<()> {
 }
 
 fn handle_deriv_del(branch: String, name: String) {
-    println!(
-        "Response: {}",
-        make_req(
-            "DELETE /derivations/",
-            Some(
-                serde_json::to_string(&Deriv {
-                    id: None,
-                    name,
-                    storeHash: "".to_owned(),
-                    branch,
-                    force: None,
-                    date_added: None
-                })
-                .unwrap()
-                .as_str(),
-            )
-        )
-    )
+    if branch != "_" && name == "_" {
+        let mut successfull = false;
+        for deriv in DB::get_all()
+            .unwrap()
+            .into_iter()
+            .filter(|x| x.branch == branch)
+        {
+            println!(
+                "{} on {}: {}",
+                deriv.name,
+                deriv.branch,
+                DB::delete(&deriv.name, &deriv.branch).green()
+            );
+            successfull = true;
+        }
+        if !successfull {
+            println!(
+                "ERROR: {}",
+                "Failed to find any names for that branch.".red()
+            );
+        }
+    } else if branch == "_" && name != "_" {
+        let mut successfull = false;
+        for deriv in DB::get_all()
+            .unwrap()
+            .into_iter()
+            .filter(|x| x.name == name)
+        {
+            println!(
+                "{} on {}: {}",
+                deriv.name,
+                deriv.branch,
+                DB::delete(&deriv.name, &deriv.branch).green()
+            );
+            successfull = true;
+        }
+        if !successfull {
+            println!("ERROR: {}", "Failed to find that name on any branch.".red());
+        }
+    } else {
+        println!("Response: {}", DB::delete(&name, &branch))
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -213,13 +240,7 @@ fn make_req(location: &str, json: Option<&str>) -> String {
 }
 
 fn handle_deriv_ls() {
-    let derivations = serde_json::from_str(
-        &reqwest::blocking::get(format!("{PUB_HOST}/derivations"))
-            .unwrap()
-            .text()
-            .unwrap(),
-    )
-    .unwrap();
+    let derivations = DB::get_all().unwrap();
     let current_system = fs::read_link("/run/current-system");
     match current_system {
         Ok(x) => match x.into_os_string().into_string() {
@@ -542,4 +563,35 @@ fn handle_deriv_apply(name: String, branch: String) {
 
 fn parse_deriv_text(str: &str) -> Result<Deriv, serde_json::Error> {
     serde_json::from_str(str.split("\r\n\r\n").last().unwrap_or_default())
+}
+
+struct DB {}
+impl DB {
+    pub fn get_all() -> Option<Vec<Deriv>> {
+        serde_json::from_str(
+            &reqwest::blocking::get(format!("{PUB_HOST}/derivations"))
+                .unwrap()
+                .text()
+                .unwrap(),
+        )
+        .ok()
+    }
+
+    pub fn delete(name: &String, branch: &String) -> String {
+        make_req(
+            "DELETE /derivations/",
+            Some(
+                serde_json::to_string(&Deriv {
+                    id: None,
+                    name: name.clone(),
+                    storeHash: "".to_owned(),
+                    branch: branch.clone(),
+                    force: None,
+                    date_added: None,
+                })
+                .unwrap()
+                .as_str(),
+            ),
+        )
+    }
 }
