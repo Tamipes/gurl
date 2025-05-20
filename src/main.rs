@@ -160,6 +160,21 @@ fn visual_println(s: String) -> Option<()> {
 }
 
 fn handle_deriv_del(branch: String, name: String) {
+    fn print_res(res: HttpResponse, name: String, branch: String) -> bool {
+        if res.status.success() {
+            println!("{} on the branch {}: {}", name, branch, res.body.green());
+        } else {
+            println!(
+                "ERROR: \"{}\" on the branch \"{}\": {}",
+                name,
+                branch,
+                res.body.red()
+            );
+        }
+        return res.status.success();
+    }
+
+    //TODO: rework so no 2 for loops when there is *1* line diff... smh
     if branch != "_" && name == "_" {
         let mut successfull = false;
         for deriv in DB::get_all()
@@ -167,13 +182,8 @@ fn handle_deriv_del(branch: String, name: String) {
             .into_iter()
             .filter(|x| x.branch == branch)
         {
-            println!(
-                "{} on {}: {}",
-                deriv.name,
-                deriv.branch,
-                DB::delete(&deriv.name, &deriv.branch).green()
-            );
-            successfull = true;
+            let res = DB::delete(&deriv.name, &deriv.branch);
+            successfull |= print_res(res, deriv.name, deriv.branch);
         }
         if !successfull {
             println!(
@@ -188,19 +198,15 @@ fn handle_deriv_del(branch: String, name: String) {
             .into_iter()
             .filter(|x| x.name == name)
         {
-            println!(
-                "{} on {}: {}",
-                deriv.name,
-                deriv.branch,
-                DB::delete(&deriv.name, &deriv.branch).green()
-            );
-            successfull = true;
+            let res = DB::delete(&deriv.name, &deriv.branch);
+            successfull |= print_res(res, deriv.name, deriv.branch);
         }
         if !successfull {
             println!("ERROR: {}", "Failed to find that name on any branch.".red());
         }
     } else {
-        println!("Response: {}", DB::delete(&name, &branch))
+        let res = DB::delete(&name, &branch);
+        print_res(res, name, branch);
     }
 }
 
@@ -214,7 +220,7 @@ struct Deriv {
     force: Option<bool>,
     date_added: Option<DateTime<Local>>,
 }
-fn make_req(location: &str, json: Option<&str>) -> String {
+fn make_req(location: &str, json: Option<&str>) -> Result<HttpResponse, HttpStatus> {
     let mut stream = TcpStream::connect((PRIV_HOST, PRIV_PORT)).unwrap();
     let request = format!(
         "{} HTTP/1.1\r\n\
@@ -233,11 +239,15 @@ fn make_req(location: &str, json: Option<&str>) -> String {
 
     let mut response = String::new();
     stream.read_to_string(&mut response).unwrap();
-    response
-        .split("\r\n\r\n")
-        .last()
-        .unwrap_or_default()
-        .to_owned()
+    let mut strs = response.split("\r\n\r\n");
+    let status = HttpStatus::parse(strs.next().unwrap()).unwrap();
+    match strs.next() {
+        Some(body) => Ok(HttpResponse {
+            body: body.to_string(),
+            status,
+        }),
+        None => Err(status),
+    }
 }
 
 fn handle_deriv_ls() {
@@ -294,10 +304,29 @@ fn handle_deriv_upload(name: &str, hash: &str, branch: Option<String>, force: Op
     let json_payload =
         serde_json::to_string(&payload).expect("Failed to serialize payload to json.");
 
-    println!(
-        "Response: {}",
-        make_req("POST /derivations", Some(json_payload.as_str()))
-    );
+    match make_req("POST /derivations", Some(json_payload.as_str())) {
+        Ok(res) => {
+            if res.status.success() {
+                println!(
+                    "{} (server response: {})",
+                    "Derivation uploaded succesffuly!".green(),
+                    res.body
+                );
+            } else {
+                println!(
+                    "ERROR: {}; {} {}",
+                    "failed to upload derivation".red(),
+                    res.status.status_code,
+                    res.status.status_message,
+                );
+                println!("\t{}", res.body);
+            }
+        }
+        Err(err) => println!(
+            "ERROR: {}",
+            format!("Failed to parse response body! err: {}", err.status_message).red()
+        ),
+    }
 }
 
 // TODO: Add fix this term_lenght thingy...
@@ -581,7 +610,7 @@ impl DB {
         .ok()
     }
 
-    pub fn delete(name: &String, branch: &String) -> String {
+    pub fn delete(name: &String, branch: &String) -> HttpResponse {
         make_req(
             "DELETE /derivations/",
             Some(
@@ -597,5 +626,43 @@ impl DB {
                 .as_str(),
             ),
         )
+        .unwrap()
+    }
+}
+
+struct HttpResponse {
+    body: String,
+    status: HttpStatus,
+}
+#[derive(Debug)]
+struct HttpStatus {
+    status_code: i32,
+    status_message: String,
+}
+impl HttpStatus {
+    fn parse(str: &str) -> Option<HttpStatus> {
+        let str = match str.lines().next() {
+            Some(x) => x,
+            None => str,
+        };
+        let mut strs = str.split(' ');
+        let _http_version = strs.next()?;
+        let status_code = strs.next()?.parse().ok()?;
+        let status_message = strs
+            .map(|str| {
+                let mut str = str.to_owned();
+                str.push_str(" ");
+                return str;
+            })
+            .collect::<String>()
+            .trim()
+            .to_owned();
+        Some(HttpStatus {
+            status_code,
+            status_message,
+        })
+    }
+    fn success(&self) -> bool {
+        self.status_code == 200
     }
 }
