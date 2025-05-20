@@ -125,6 +125,7 @@ fn main() {
                     .write_all(password.as_bytes())
                     .expect("Failed to write to sudo child process!")
             });
+            handle.join().unwrap();
             let status = child.wait();
             match status {
                 Ok(exitStatus) => {
