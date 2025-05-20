@@ -27,10 +27,10 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Configure gc roots derivations on server or apply them
+    /// Configure gc roots derivations on server or apply them to local computer
     // #[clap(alias = "derivations")]
     Deriv(DerivArgs),
-    /// Sudo, but request the password visually using rofi -dmenu -password; this might not be a safe idea tho
+    /// Sudo, but request the password visually using `rofi -dmenu -password`; this might not be a safe idea tho
     Sudo(SudoArgs),
 }
 
@@ -56,14 +56,16 @@ enum DerivCommands {
         #[clap(long, short, action = ArgAction::SetTrue)]
         force: Option<bool>,
     },
+    /// List all derivations on server(in the DB)
     Ls {},
     /// Delete the given name on a given branch.
-    /// Use "_" to mean all of a given argument. | gurl deriv del auto-merge _
+    /// "_" means wildcard ; `gurl deriv del auto-merge _`
     Del {
         branch: String,
         #[clap(default_value = "_")]
         name: String,
     },
+    /// Apply a derivation from the server
     Apply {
         #[arg(long, short, default_value = "$HOSTNAME")]
         name: Option<String>,
@@ -75,8 +77,6 @@ enum DerivCommands {
 fn main() {
     let cli = Cli::parse();
 
-    // You can check for the existence of subcommands, and if found use their
-    // matches just as you would the top level cmd
     match &cli.command {
         Commands::Deriv(derivargs) => match &derivargs.command {
             DerivCommands::Up {
@@ -150,7 +150,7 @@ fn visual_println(s: String) -> Option<()> {
     let handle = std::thread::spawn(move || {
         stdin
             .write_all(s.as_bytes())
-            .expect("Error: Failed to write to child process!")
+            .expect("ERROR: Failed to write to child process in `visual_println`!")
     });
     match handle.join() {
         Ok(_) => Some(()),
@@ -247,14 +247,21 @@ fn handle_deriv_ls() {
             Ok(x) => pretty_print(derivations, x.as_str()),
             Err(x) => {
                 println!(
-                    "Error parsing current system's nix store hash(OsString) to String {:?}",
-                    x
+                    "ERROR: {}",
+                    format!(
+                        "failed parsing current system's nix store hash(OsString) to String {:?}",
+                        x
+                    )
+                    .red()
                 );
                 pretty_print(derivations, "");
             }
         },
         Err(x) => {
-            println!("Error getting the current system's store hash: {:?}", x);
+            println!(
+                "ERROR: {}",
+                format!("getting the current system's store hash: {:?}", x).red()
+            );
             pretty_print(derivations, "");
         }
     }
@@ -529,12 +536,12 @@ fn handle_deriv_apply(name: String, branch: String) {
                 if exit_status.success() {
                     println!("INFO: Closure has finished copying")
                 } else {
-                    println!("ERROR: Error during closure copy!");
+                    println!("ERROR: {}", "Error during closure copy!".red());
                     return;
                 }
             }
             Err(_) => {
-                println!("ERROR: Failed to start closure copy!");
+                println!("ERROR: {}", "Failed to start closure copy!".red());
                 return;
             }
         };
@@ -554,10 +561,10 @@ fn handle_deriv_apply(name: String, branch: String) {
             if exit_status.success() {
                 println!("INFO: {}", "Successfully instaleld the closure!".green());
             } else {
-                println!("ERROR: Failed during closure install!")
+                println!("ERROR: {}", "Failed during closure install!".red())
             }
         }
-        Err(x) => println!("ERROR: Failed to start gurl-apply-helper!"),
+        Err(x) => println!("ERROR: {}", "Failed to start gurl-apply-helper!".red()),
     }
 }
 
