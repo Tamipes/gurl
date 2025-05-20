@@ -128,8 +128,8 @@ fn main() {
             handle.join().unwrap();
             let status = child.wait();
             match status {
-                Ok(exitStatus) => {
-                    if !exitStatus.success() {
+                Ok(exit_status) => {
+                    if !exit_status.success() {
                         visual_println("Bad password!\n(exit with failure!)".to_owned()).unwrap();
                     }
                 }
@@ -567,10 +567,6 @@ fn handle_deriv_apply(name: String, branch: String) {
         }
         Err(x) => println!("ERROR: {}", "Failed to start gurl-apply-helper!".red()),
     }
-}
-
-fn parse_deriv_text(str: &str) -> Result<Deriv, serde_json::Error> {
-    serde_json::from_str(str.split("\r\n\r\n").last().unwrap_or_default())
 }
 
 struct DB {}
