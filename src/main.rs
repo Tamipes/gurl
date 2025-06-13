@@ -3,11 +3,11 @@ use clap::{ArgAction, Args, Parser, Subcommand};
 use colored::{ColoredString, Colorize};
 use serde_derive::{Deserialize, Serialize};
 use std::fmt::Debug;
-use std::fs;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::{fs, u16};
 
 const PRIV_HOST: &str = "10.100.0.1";
 // const HOST: &str = "localhost";
@@ -331,7 +331,12 @@ fn handle_deriv_upload(name: &str, hash: &str, branch: Option<String>, force: Op
 
 // TODO: Add fix this term_lenght thingy...
 fn table_print<const N: usize>(mut table: Vec<Vec<Fonal>>) {
-    let termsize::Size { rows: _, cols } = termsize::get().unwrap();
+    let termsize::Size { rows: _, cols } = termsize::get()
+        .or(Some(termsize::Size {
+            rows: 0,
+            cols: u16::MAX,
+        }))
+        .unwrap();
     let term_width = (cols - 4).into();
     let mut lengths: [usize; N] = [0; N];
     for row in &table {
