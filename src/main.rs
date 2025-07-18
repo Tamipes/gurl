@@ -170,6 +170,7 @@ fn handle_deriv_del(branch: String, name: String) {
                 branch,
                 res.body.red()
             );
+            std::process::exit(1);
         }
         return res.status.success();
     }
@@ -190,6 +191,7 @@ fn handle_deriv_del(branch: String, name: String) {
                 "ERROR: {}",
                 "Failed to find any names for that branch.".red()
             );
+            std::process::exit(1);
         }
     } else if branch == "_" && name != "_" {
         let mut successfull = false;
@@ -203,6 +205,7 @@ fn handle_deriv_del(branch: String, name: String) {
         }
         if !successfull {
             println!("ERROR: {}", "Failed to find that name on any branch.".red());
+            std::process::exit(1);
         }
     } else {
         let res = DB::delete(&name, &branch);
@@ -266,6 +269,7 @@ fn handle_deriv_ls() {
                     .red()
                 );
                 pretty_print(derivations, "");
+                std::process::exit(1);
             }
         },
         Err(x) => {
@@ -274,6 +278,7 @@ fn handle_deriv_ls() {
                 format!("getting the current system's store hash: {:?}", x).red()
             );
             pretty_print(derivations, "");
+            std::process::exit(1);
         }
     }
 }
@@ -320,12 +325,16 @@ fn handle_deriv_upload(name: &str, hash: &str, branch: Option<String>, force: Op
                     res.status.status_message,
                 );
                 println!("\t{}", res.body);
+                std::process::exit(1);
             }
         }
-        Err(err) => println!(
-            "ERROR: {}",
-            format!("Failed to parse response body! err: {}", err.status_message).red()
-        ),
+        Err(err) => {
+            println!(
+                "ERROR: {}",
+                format!("Failed to parse response body! err: {}", err.status_message).red()
+            );
+            std::process::exit(1);
+        }
     }
 }
 
