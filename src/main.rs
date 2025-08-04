@@ -6,7 +6,7 @@ use std::fmt::Debug;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::{Command, ExitStatus, Stdio};
 use std::{fs, u16};
 
 const PRIV_HOST: &str = "10.100.0.1";
@@ -309,32 +309,81 @@ fn handle_deriv_upload(name: &str, hash: &str, branch: Option<String>, force: Op
     let json_payload =
         serde_json::to_string(&payload).expect("Failed to serialize payload to json.");
 
+    match make_upload_req(json_payload.clone()) {
+        Ok(str) => print_exit(str.as_str(), 0),
+        Err(err) => match err {
+            UploadReqError::Comment(str) => {
+                println!("{}", str);
+                std::process::exit(1);
+            }
+            UploadReqError::StoreHashNotFound => {
+                println!("INFO: uploading derivation closure to elaina");
+                let out = Command::new("nix")
+                    .args(vec!["copy", "--to", "ssh://root@elaina.tami.moe", hash])
+                    .stdout(Stdio::inherit())
+                    .stderr(Stdio::inherit())
+                    .output()
+                    .expect("Could not run `nix` as `nix copy ...`");
+                if !out.status.success() {
+                    print_exit("ERROR: `nix copy ...` failed", 1);
+                }
+                match make_upload_req(json_payload) {
+                    Ok(str) => {
+                        print_exit(str.as_str(), 0);
+                    }
+                    Err(err) => {
+                        match err {
+                            UploadReqError::Comment(str) => print_exit(str.as_str(), 1),
+                            UploadReqError::StoreHashNotFound => {
+                                print_exit("ERROR: failed to find derivation on server even after upload...", 1);
+                            }
+                        };
+                    }
+                };
+            }
+        },
+    };
+}
+
+fn print_exit(str: &str, code: i32) {
+    println!("{}", str);
+    std::process::exit(code);
+}
+enum UploadReqError {
+    Comment(String),
+    StoreHashNotFound,
+}
+
+fn make_upload_req(json_payload: String) -> Result<String, UploadReqError> {
     match make_req("POST /derivations", Some(json_payload.as_str())) {
         Ok(res) => {
             if res.status.success() {
-                println!(
+                Ok(format!(
                     "{} (server response: {})",
                     "Derivation uploaded succesffuly!".green(),
                     res.body
-                );
+                ))
             } else {
-                println!(
-                    "ERROR: {}; {} {}",
-                    "failed to upload derivation".red(),
-                    res.status.status_code,
-                    res.status.status_message,
-                );
-                println!("\t{}", res.body);
-                std::process::exit(1);
+                if res.status.status_code == 404 {
+                    Err(UploadReqError::StoreHashNotFound)
+                } else {
+                    Err(UploadReqError::Comment(format!(
+                        "{}\n{}",
+                        format!(
+                            "ERROR: {}; {} {}",
+                            "failed to upload derivation".red(),
+                            res.status.status_code,
+                            res.status.status_message,
+                        ),
+                        format!("\t{}", res.body)
+                    )))
+                }
             }
         }
-        Err(err) => {
-            println!(
-                "ERROR: {}",
-                format!("Failed to parse response body! err: {}", err.status_message).red()
-            );
-            std::process::exit(1);
-        }
+        Err(err) => Err(UploadReqError::Comment(format!(
+            "ERROR: {}",
+            format!("Failed to parse response body! err: {}", err.status_message).red()
+        ))),
     }
 }
 
