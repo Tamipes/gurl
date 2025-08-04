@@ -319,7 +319,7 @@ fn handle_deriv_upload(name: &str, hash: &str, branch: Option<String>, force: Op
             UploadReqError::StoreHashNotFound => {
                 println!("INFO: uploading derivation closure to elaina");
                 let out = Command::new("nix")
-                    .args(vec!["copy", "--to", "root@elaina.tami.moe", hash])
+                    .args(vec!["copy", "--to", "ssh://root@elaina.tami.moe", hash])
                     .stdout(Stdio::inherit())
                     .stderr(Stdio::inherit())
                     .output()
