@@ -2,8 +2,9 @@ use chrono::{DateTime, Local};
 use clap::{ArgAction, Args, Parser, Subcommand};
 use colored::{ColoredString, Colorize};
 use serde_derive::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fmt::Debug;
-use std::io::{Read, Write};
+use std::io::{BufRead, Read, Write};
 use std::net::TcpStream;
 use std::path::Path;
 use std::process::{Command, ExitStatus, Stdio};
@@ -318,12 +319,29 @@ fn handle_deriv_upload(name: &str, hash: &str, branch: Option<String>, force: Op
             }
             UploadReqError::StoreHashNotFound => {
                 println!("INFO: uploading derivation closure to elaina");
-                let out = Command::new("nix")
-                    .args(vec!["copy", "--to", "ssh://root@elaina.tami.moe", hash])
-                    .stdout(Stdio::inherit())
-                    .stderr(Stdio::inherit())
-                    .output()
-                    .expect("Could not run `nix` as `nix copy ...`");
+
+                let private_key = std::env::var("GURL_SSH_KEY");
+                let out;
+
+                if let Ok(priv_key) = private_key {
+                    println!("INFO: using ssh-agent and private key");
+                    out = run_in_ssh_agent(
+                        priv_key,
+                        Command::new("nix")
+                            .args(vec!["copy", "--to", "ssh://root@elaina.tami.moe", hash])
+                            .stdout(Stdio::inherit())
+                            .stderr(Stdio::inherit()),
+                    );
+                } else {
+                    let nix_copy = Command::new("nix")
+                        .args(vec!["copy", "--to", "ssh://root@elaina.tami.moe", hash])
+                        .stdout(Stdio::inherit())
+                        .stderr(Stdio::inherit())
+                        .output();
+                    out = nix_copy;
+                }
+
+                let out = out.expect("Could not run `nix` as `nix copy ...`");
                 if !out.status.success() {
                     print_exit("ERROR: `nix copy ...` failed", 1);
                 }
@@ -343,6 +361,86 @@ fn handle_deriv_upload(name: &str, hash: &str, branch: Option<String>, force: Op
             }
         },
     };
+}
+
+fn run_in_ssh_agent(
+    ssh_key: String,
+    cmd: &mut Command,
+) -> Result<std::process::Output, std::io::Error> {
+    let mut envs = HashMap::new();
+
+    let agent = Command::new("ssh-agent")
+        .stdout(Stdio::piped())
+        .output()
+        .expect("failed to run `ssh-agent`");
+    for line in String::from_utf8_lossy(&agent.stdout).lines() {
+        if let Some(rest) = line.strip_prefix("SSH_AUTH_SOCK=") {
+            envs.insert(
+                "SSH_AUTH_SOCK".to_string(),
+                rest.split(';').next().unwrap().to_string(),
+            );
+        }
+
+        if let Some(rest) = line.strip_prefix("SSH_AGENT_PID=") {
+            envs.insert(
+                "SSH_AGENT_PID".to_string(),
+                rest.split(';').next().unwrap().to_string(),
+            );
+        }
+    }
+    if !agent.status.success() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Creating an `ssh-agent` returned a non-zero exit code. - Tami",
+        ));
+    }
+
+    let output = inner_ssh_agent(ssh_key, cmd, &envs);
+
+    let agent_close = Command::new("ssh-agent").arg("-k").envs(&envs).output()?;
+
+    if !agent_close.status.success() {
+        println!("WARN: Could not close `ssh-agent`");
+        for (key, value) in envs {
+            println!("\t{key}={value}; export {key};");
+        }
+    }
+
+    return output;
+}
+fn inner_ssh_agent(
+    ssh_key: String,
+    cmd: &mut Command,
+    envs: &HashMap<String, String>,
+) -> Result<std::process::Output, std::io::Error> {
+    let mut ssh_add = Command::new("ssh-add")
+        .arg("-")
+        .envs(envs.clone())
+        .stdin(Stdio::piped())
+        .spawn()?;
+
+    let ssh_add_input = match ssh_add.stdin.as_mut() {
+        Some(x) => x,
+        None => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Could not get mutable stdin of ssh-add. - Tami",
+            ))
+        }
+    };
+
+    ssh_add_input.write_all(ssh_key.as_bytes())?;
+    ssh_add_input.write_all(b"\n")?;
+    drop(ssh_add.stdin.take());
+
+    if ssh_add.wait_with_output()?.status.success() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Running an `ssh-add` returned a non-zero exit code. - Tami",
+        ));
+    }
+
+    return cmd.envs(envs.clone()).output();
 }
 
 fn print_exit(str: &str, code: i32) {
