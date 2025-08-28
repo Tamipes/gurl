@@ -388,12 +388,25 @@ fn run_in_ssh_agent(
             );
         }
     }
+    if !agent.status.success() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Creating an `ssh-agent` returned a non-zero exit code. - Tami",
+        ));
+    }
 
     let output = inner_ssh_agent(ssh_key, cmd, &envs);
 
-    Command::new("ssh-agent").arg("-k").envs(envs).output()?;
+    let agent_close = Command::new("ssh-agent").arg("-k").envs(&envs).output()?;
 
-    output
+    if !agent_close.status.success() {
+        println!("WARN: Could not close `ssh-agent`");
+        for (key, value) in envs {
+            println!("\t{key}={value}; export {key};");
+        }
+    }
+
+    return output;
 }
 fn inner_ssh_agent(
     ssh_key: String,
@@ -410,7 +423,7 @@ fn inner_ssh_agent(
         Some(x) => x,
         None => {
             return Err(std::io::Error::new(
-                std::io::ErrorKind::BrokenPipe,
+                std::io::ErrorKind::Other,
                 "Could not get mutable stdin of ssh-add. - Tami",
             ))
         }
@@ -420,9 +433,14 @@ fn inner_ssh_agent(
     ssh_add_input.write_all(b"\n")?;
     drop(ssh_add.stdin.take());
 
-    let output = cmd.envs(envs.clone()).output();
+    if ssh_add.wait_with_output()?.status.success() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Running an `ssh-add` returned a non-zero exit code. - Tami",
+        ));
+    }
 
-    output
+    return cmd.envs(envs.clone()).output();
 }
 
 fn print_exit(str: &str, code: i32) {
