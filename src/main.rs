@@ -388,6 +388,15 @@ fn run_in_ssh_agent(
             );
         }
     }
+    match envs.get("SSH_AGENT_PID") {
+        Some(str) => println!("INFO: ssh-agent pid: {}", str),
+        None => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "`ssh-agent` failed to run correctly. - Tami",
+            ));
+        }
+    }
     if !agent.status.success() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::Other,
@@ -433,10 +442,10 @@ fn inner_ssh_agent(
     ssh_add_input.write_all(b"\n")?;
     drop(ssh_add.stdin.take());
 
-    if ssh_add.wait_with_output()?.status.success() {
+    if !ssh_add.wait_with_output()?.status.success() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::Other,
-            "Running an `ssh-add` returned a non-zero exit code. - Tami",
+            "Running a `ssh-add` returned a non-zero exit code. - Tami",
         ));
     }
 
