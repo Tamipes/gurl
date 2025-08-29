@@ -10,6 +10,8 @@ use std::path::Path;
 use std::process::{Command, ExitStatus, Stdio};
 use std::{fs, u16};
 
+mod ssh_agent;
+
 const PRIV_HOST: &str = "10.100.0.1";
 // const HOST: &str = "localhost";
 const PRIV_PORT: u16 = 8081;
@@ -321,12 +323,14 @@ fn handle_deriv_upload(name: &str, hash: &str, branch: Option<String>, force: Op
                 println!("INFO: uploading derivation closure to elaina");
 
                 let private_key = std::env::var("GURL_SSH_KEY");
+                let known_hosts_file = std::env::var("GURL_SSH_HOSTS");
                 let out;
 
                 if let Ok(priv_key) = private_key {
                     println!("INFO: using ssh-agent and private key");
-                    out = run_in_ssh_agent(
-                        priv_key,
+                    let agent =
+                        ssh_agent::SshAgent::new(priv_key).expect("Failed to create SshAgent");
+                    out = agent.run_cmd(
                         Command::new("nix")
                             .args(vec!["copy", "--to", "ssh://root@elaina.tami.moe", hash])
                             .stdout(Stdio::inherit())
@@ -361,95 +365,6 @@ fn handle_deriv_upload(name: &str, hash: &str, branch: Option<String>, force: Op
             }
         },
     };
-}
-
-fn run_in_ssh_agent(
-    ssh_key: String,
-    cmd: &mut Command,
-) -> Result<std::process::Output, std::io::Error> {
-    let mut envs = HashMap::new();
-
-    let agent = Command::new("ssh-agent")
-        .stdout(Stdio::piped())
-        .output()
-        .expect("failed to run `ssh-agent`");
-    for line in String::from_utf8_lossy(&agent.stdout).lines() {
-        if let Some(rest) = line.strip_prefix("SSH_AUTH_SOCK=") {
-            envs.insert(
-                "SSH_AUTH_SOCK".to_string(),
-                rest.split(';').next().unwrap().to_string(),
-            );
-        }
-
-        if let Some(rest) = line.strip_prefix("SSH_AGENT_PID=") {
-            envs.insert(
-                "SSH_AGENT_PID".to_string(),
-                rest.split(';').next().unwrap().to_string(),
-            );
-        }
-    }
-    match envs.get("SSH_AGENT_PID") {
-        Some(str) => println!("INFO: ssh-agent pid: {}", str),
-        None => {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "`ssh-agent` failed to run correctly. - Tami",
-            ));
-        }
-    }
-    if !agent.status.success() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "Creating an `ssh-agent` returned a non-zero exit code. - Tami",
-        ));
-    }
-
-    let output = inner_ssh_agent(ssh_key, cmd, &envs);
-
-    let agent_close = Command::new("ssh-agent").arg("-k").envs(&envs).output()?;
-
-    if !agent_close.status.success() {
-        println!("WARN: Could not close `ssh-agent`");
-        for (key, value) in envs {
-            println!("\t{key}={value}; export {key};");
-        }
-    }
-
-    return output;
-}
-fn inner_ssh_agent(
-    ssh_key: String,
-    cmd: &mut Command,
-    envs: &HashMap<String, String>,
-) -> Result<std::process::Output, std::io::Error> {
-    let mut ssh_add = Command::new("ssh-add")
-        .arg("-")
-        .envs(envs.clone())
-        .stdin(Stdio::piped())
-        .spawn()?;
-
-    let ssh_add_input = match ssh_add.stdin.as_mut() {
-        Some(x) => x,
-        None => {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Could not get mutable stdin of ssh-add. - Tami",
-            ))
-        }
-    };
-
-    ssh_add_input.write_all(ssh_key.as_bytes())?;
-    ssh_add_input.write_all(b"\n")?;
-    drop(ssh_add.stdin.take());
-
-    if !ssh_add.wait_with_output()?.status.success() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "Running a `ssh-add` returned a non-zero exit code. - Tami",
-        ));
-    }
-
-    return cmd.envs(envs.clone()).output();
 }
 
 fn print_exit(str: &str, code: i32) {
