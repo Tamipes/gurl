@@ -324,12 +324,19 @@ fn handle_deriv_upload(name: &str, hash: &str, branch: Option<String>, force: Op
 
                 let private_key = std::env::var("GURL_SSH_KEY");
                 let known_hosts_file = std::env::var("GURL_SSH_HOSTS");
+
                 let out;
 
                 if let Ok(priv_key) = private_key {
                     println!("INFO: using ssh-agent and private key");
-                    let agent =
+
+                    let mut agent =
                         ssh_agent::SshAgent::new(priv_key).expect("Failed to create SshAgent");
+                    if let Ok(file_path) = known_hosts_file {
+                        println!("INFO: using known_hosts file");
+                        agent.add_ssh_opts(format!("-o UserKnownHostsFile={}", file_path))
+                    }
+
                     out = agent.run_cmd(
                         Command::new("nix")
                             .args(vec!["copy", "--to", "ssh://root@elaina.tami.moe", hash])

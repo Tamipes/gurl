@@ -83,7 +83,11 @@ impl SshAgent {
         return Ok(sruct);
     }
 
-    pub fn run_cmd(self, cmd: &mut Command) -> Result<std::process::Output, std::io::Error> {
+    pub fn add_ssh_opts(&mut self, str: String) {
+        self.envs.insert("NIX_SSHOPTS".to_string(), str);
+    }
+
+    pub fn run_cmd(&mut self, cmd: &mut Command) -> Result<std::process::Output, std::io::Error> {
         cmd.envs(&self.envs).output()
     }
 }
