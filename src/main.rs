@@ -631,6 +631,45 @@ fn handle_deriv_apply(name: String, branch: String) {
     println!("\tdate: {}", handle_date_to_dynamic_info(deriv.date_added));
 
     let password = rpassword::prompt_password("[sudo] password for later: ").unwrap();
+
+    // Check if password works with sudo
+    let mut cmd = Command::new("sudo")
+        .args(vec![
+            "-S",
+            "echo",
+            "INFO: Succesfully acquired sudo password!",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .expect("Some error with starting sudo echo checker");
+    let mut stdin = cmd
+        .stdin
+        .take()
+        .expect("Failed to open stdin of sudo echo checker");
+    let pswd = password.clone();
+    std::thread::spawn(move || stdin.write_all(pswd.as_bytes()));
+    let status = cmd.wait();
+    match status {
+        Ok(es) => {
+            if !es.success() {
+                println!(
+                    "ERROR: {}",
+                    "Bad password for sudo. Sudo check failed.".red()
+                );
+                return;
+            }
+        }
+        Err(x) => {
+            println!(
+                "ERROR: {}",
+                "Error during checking exit code of sudo echo checker".red()
+            );
+            return;
+        }
+    }
+
     if !Path::new(&deriv.storeHash).exists() {
         let mut cmd = Command::new("nix")
             .arg("copy")
