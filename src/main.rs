@@ -77,6 +77,8 @@ enum DerivCommands {
     },
     /// Rollback the current nixos profile
     Rollback {},
+    /// Reapply the current system(run switch-to-configuration)
+    Reapply {},
 }
 
 fn main() {
@@ -96,6 +98,7 @@ fn main() {
             }
             DerivCommands::Del { branch, name } => handle_deriv_del(branch.clone(), name.clone()),
             DerivCommands::Rollback {} => handle_deriv_rollback(),
+            DerivCommands::Reapply {} => handle_deriv_reapply(),
         },
         Commands::Sudo(sudo_args) => {
             let password = String::from_utf8_lossy(
@@ -734,6 +737,45 @@ fn sudo_password_getter() -> Option<String> {
                 "Error during checking exit code of sudo echo checker".red()
             );
             return None;
+        }
+    }
+}
+
+fn handle_deriv_reapply() {
+    let password = sudo_password_getter().expect("Failed to get sudo password");
+    let mut cmd = Command::new("sudo")
+        .args(vec![
+            "-S",
+            "/nix/var/nix/profiles/system/bin/switch-to-configuration",
+            "switch",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .expect("Some error with starting sudo switch-to-configuration");
+    let mut stdin = cmd.stdin.take().expect("Failed to open stdin");
+    let pswd = password.clone();
+    std::thread::spawn(move || stdin.write_all(pswd.as_bytes()));
+    let status = cmd.wait();
+    match status {
+        Ok(exit_status) => {
+            if exit_status.success() {
+                println!(
+                    "INFO: {}",
+                    "Successfully reapplied the configuration!".green()
+                );
+            } else {
+                println!("ERROR: {}", "Failed to run switch-to-configuration!".red());
+                return;
+            }
+        }
+        Err(x) => {
+            println!(
+                "ERROR: {}",
+                "Failed to start sudo switch-to-configuration".red()
+            );
+            return;
         }
     }
 }
