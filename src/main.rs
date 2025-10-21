@@ -75,6 +75,8 @@ enum DerivCommands {
         #[arg(long, short, default_value = "main")]
         branch: Option<String>,
     },
+    /// Rollback the current nixos profile
+    Rollback {},
 }
 
 fn main() {
@@ -93,6 +95,7 @@ fn main() {
                 handle_deriv_apply(name.clone().unwrap(), branch.clone().unwrap())
             }
             DerivCommands::Del { branch, name } => handle_deriv_del(branch.clone(), name.clone()),
+            DerivCommands::Rollback {} => handle_deriv_rollback(),
         },
         Commands::Sudo(sudo_args) => {
             let password = String::from_utf8_lossy(
@@ -630,45 +633,7 @@ fn handle_deriv_apply(name: String, branch: String) {
     println!("\thash: {}", deriv.storeHash);
     println!("\tdate: {}", handle_date_to_dynamic_info(deriv.date_added));
 
-    let password = rpassword::prompt_password("[sudo] password for later: ").unwrap();
-
-    // Check if password works with sudo
-    let mut cmd = Command::new("sudo")
-        .args(vec![
-            "-S",
-            "echo",
-            "INFO: Succesfully acquired sudo password!",
-        ])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .expect("Some error with starting sudo echo checker");
-    let mut stdin = cmd
-        .stdin
-        .take()
-        .expect("Failed to open stdin of sudo echo checker");
-    let pswd = password.clone();
-    std::thread::spawn(move || stdin.write_all(pswd.as_bytes()));
-    let status = cmd.wait();
-    match status {
-        Ok(es) => {
-            if !es.success() {
-                println!(
-                    "ERROR: {}",
-                    "Bad password for sudo. Sudo check failed.".red()
-                );
-                return;
-            }
-        }
-        Err(x) => {
-            println!(
-                "ERROR: {}",
-                "Error during checking exit code of sudo echo checker".red()
-            );
-            return;
-        }
-    }
+    let password = sudo_password_getter().expect("Failed to get sudo password");
 
     if !Path::new(&deriv.storeHash).exists() {
         let mut cmd = Command::new("nix")
@@ -726,6 +691,129 @@ fn handle_deriv_apply(name: String, branch: String) {
             }
         }
         Err(x) => println!("ERROR: {}", "Failed to start gurl-apply-helper!".red()),
+    }
+}
+
+fn sudo_password_getter() -> Option<String> {
+    let password = rpassword::prompt_password("[sudo] password for later: ").unwrap();
+
+    // Check if password works with sudo
+    let mut cmd = Command::new("sudo")
+        .args(vec![
+            "-S",
+            "echo",
+            "INFO: Succesfully acquired sudo password!",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .expect("Some error with starting sudo echo checker");
+    let mut stdin = cmd
+        .stdin
+        .take()
+        .expect("Failed to open stdin of sudo echo checker");
+    let pswd = password.clone();
+    std::thread::spawn(move || stdin.write_all(pswd.as_bytes()));
+    let status = cmd.wait();
+    match status {
+        Ok(es) => {
+            if !es.success() {
+                println!(
+                    "ERROR: {}",
+                    "Bad password for sudo. Sudo check failed.".red()
+                );
+                return None;
+            } else {
+                return Some(password);
+            }
+        }
+        Err(x) => {
+            println!(
+                "ERROR: {}",
+                "Error during checking exit code of sudo echo checker".red()
+            );
+            return None;
+        }
+    }
+}
+
+fn handle_deriv_rollback() {
+    let password = sudo_password_getter().expect("Failed to get sudo password");
+
+    let mut cmd = Command::new("sudo")
+        .args(vec![
+            "-S",
+            "nix-env",
+            "--profile",
+            "/nix/var/nix/profiles/system",
+            "--rollback",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .expect("Some error with starting sudo nix-env");
+    let mut stdin = cmd.stdin.take().expect("Failed to open stdin");
+    let pswd = password.clone();
+    std::thread::spawn(move || stdin.write_all(pswd.as_bytes()));
+    let status = cmd.wait();
+    match status {
+        Ok(exit_status) => {
+            if exit_status.success() {
+                println!("INFO: {}", "Successfully rolled back profile!");
+            } else {
+                println!(
+                    "ERROR: {}",
+                    "Failed to roll back profile with nix-env!".red()
+                );
+                return;
+            }
+        }
+        Err(x) => {
+            println!("ERROR: {}", "Failed to start sudo nix-env".red());
+            return;
+        }
+    }
+
+    let mut cmd = Command::new("sudo")
+        .args(vec![
+            "-S",
+            "/nix/var/nix/profiles/system/bin/switch-to-configuration",
+            "switch",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .expect("Some error with starting sudo switch-to-configuration");
+    let mut stdin = cmd.stdin.take().expect("Failed to open stdin");
+    let pswd = password.clone();
+    std::thread::spawn(move || stdin.write_all(pswd.as_bytes()));
+    let status = cmd.wait();
+    match status {
+        Ok(exit_status) => {
+            if exit_status.success() {
+                println!(
+                    "INFO: {}",
+                    "Successfully applied(switched) to the old configuration!".green()
+                );
+            } else {
+                println!(
+                    "ERROR: {}",
+                    "Failed to apply(switch) back to the old profile with switch-to-configuration!"
+                        .red()
+                );
+                return;
+            }
+        }
+        Err(x) => {
+            println!(
+                "ERROR: {}",
+                "Failed to start sudo switch-to-configuration".red()
+            );
+            return;
+        }
     }
 }
 
