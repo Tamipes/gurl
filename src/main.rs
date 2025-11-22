@@ -12,7 +12,7 @@ use std::{fs, u16};
 
 mod ssh_agent;
 
-const PRIV_HOST: &str = "10.100.0.1";
+const PRIV_HOST: &str = "100.64.0.2";
 // const HOST: &str = "localhost";
 const PRIV_PORT: u16 = 8081;
 
