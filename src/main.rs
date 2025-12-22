@@ -705,7 +705,8 @@ fn sudo_password_getter() -> Option<String> {
         .args(vec![
             "-S",
             "echo",
-            "INFO: Succesfully acquired sudo password!",
+            "-e",
+            &format!("\n{}", "INFO: Succesfully acquired sudo password!".green()),
         ])
         .stdin(Stdio::piped())
         .stdout(Stdio::inherit())
