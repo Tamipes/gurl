@@ -28,7 +28,19 @@
         inherit (pkgs) lib;
 
         craneLib = crane.mkLib pkgs;
-        src = craneLib.cleanCargoSource ./.;
+        src =
+          let
+            # Only keeps shell files
+            shellFilter = path: _type: builtins.match ".*sh$" path != null;
+            shellOrCargo = path: type:
+              (shellFilter path type) || (craneLib.filterCargoSources path type);
+          in
+          lib.cleanSourceWith {
+            src = ./.;
+            filter = shellOrCargo;
+            name = "source";
+          }
+        ;
 
         gurl-apply-helper = pkgs.writeShellScriptBin "gurl-apply-helper" ''
           # TODO: Make the check more in depth

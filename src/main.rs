@@ -35,6 +35,10 @@ enum Commands {
     Deriv(DerivArgs),
     /// Sudo, but request the password visually using `rofi -dmenu -password`; this might not be a safe idea tho
     Sudo(SudoArgs),
+    /// Print the bash eval line to so you can use the `gurl auth` command
+    Init,
+    /// Log into github and set up a token for `nix flake update`
+    Auth,
 }
 
 #[derive(Args)]
@@ -144,6 +148,22 @@ fn main() {
                 }
                 Err(_) => visual_println("Failed to start program!".to_owned()).unwrap(),
             }
+        }
+        Commands::Init => {
+            println!("{}", include_str!("bash_eval.sh"));
+        }
+        Commands::Auth => {
+            println!("Eval is not set up!");
+            println!();
+            println!("    bash copy paste:");
+            println!(
+                "{}",
+                r#"
+if command -v gurl &> /dev/null
+then
+    eval \"$(gurl init)\"
+fi"#
+            );
         }
     }
 }
