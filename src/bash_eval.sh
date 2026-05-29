@@ -16,7 +16,7 @@ gurl_wrapper() {
     NIX_CONFIG="access-tokens = github.com=$GITHUB_TOKEN"
     export NIX_CONFIG
   else
-    \gurl
+    \gurl "$@"
   fi
 }
 

@@ -161,7 +161,7 @@ fn main() {
                 r#"
 if command -v gurl &> /dev/null
 then
-    eval \"$(gurl init)\"
+    eval "$(gurl init)"
 fi"#
             );
         }
