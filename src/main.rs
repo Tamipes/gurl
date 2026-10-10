@@ -1,14 +1,12 @@
 use chrono::{DateTime, Local};
 use clap::{ArgAction, Args, Parser, Subcommand};
 use colored::{ColoredString, Colorize};
-use serde_derive::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fmt::Debug;
-use std::io::{BufRead, Read, Write};
+use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::Path;
-use std::process::{Command, ExitStatus, Stdio};
-use std::{fs, u16};
+use std::process::{Command, Stdio};
+use std::u16;
 
 mod deriv;
 mod ssh_agent;
@@ -415,7 +413,6 @@ impl DB {
             "DELETE /derivations/",
             Some(
                 serde_json::to_string(&deriv::Deriv {
-                    id: None,
                     name: name.clone(),
                     storeHash: "".to_owned(),
                     branch: branch.clone(),
@@ -432,7 +429,6 @@ impl DB {
         let payload = deriv::Deriv {
             date_added: None,
             force: None,
-            id: None,
             branch,
             name,
             storeHash: "".to_owned(),

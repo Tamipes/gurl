@@ -12,7 +12,6 @@ use crate::{handle_date_to_dynamic_info, print_exit, ssh_agent, DBResponse, DB};
 #[derive(Serialize, Deserialize, Debug)]
 #[allow(non_snake_case)]
 pub struct Deriv {
-    pub id: Option<i32>,
     pub name: String,
     pub storeHash: String,
     pub branch: String,
