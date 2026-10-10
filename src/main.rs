@@ -428,6 +428,29 @@ impl DB {
         )
         .unwrap()
     }
+    pub fn query(name: String, branch: String) -> deriv::Deriv {
+        let payload = deriv::Deriv {
+            date_added: None,
+            force: None,
+            id: None,
+            branch,
+            name,
+            storeHash: "".to_owned(),
+        };
+        let json_payload =
+            serde_json::to_string(&payload).expect("Failed to serialize payload to json.");
+        let client = reqwest::blocking::Client::new();
+        let response = client
+            .get(format!("{PUB_HOST}/derivations/"))
+            .body(json_payload)
+            .send()
+            .unwrap()
+            .text()
+            .unwrap();
+
+        let deriv: deriv::Deriv = serde_json::from_str(&response).unwrap();
+        return deriv;
+    }
 }
 
 struct DBResponse {

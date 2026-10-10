@@ -1,16 +1,13 @@
 use chrono::{DateTime, Local};
-use clap::{ArgAction, Args, Parser, Subcommand};
-use colored::{ColoredString, Colorize};
+use colored::Colorize;
 use serde_derive::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fmt::Debug;
-use std::io::{BufRead, Read, Write};
-use std::net::TcpStream;
+use std::fs;
+use std::io::Write;
 use std::path::Path;
-use std::process::{Command, ExitStatus, Stdio};
-use std::{fs, u16};
+use std::process::{Command, Stdio};
 
-use crate::{handle_date_to_dynamic_info, print_exit, ssh_agent, DBResponse, DB, PUB_HOST};
+use crate::{handle_date_to_dynamic_info, print_exit, ssh_agent, DBResponse, DB};
 
 #[derive(Serialize, Deserialize, Debug)]
 #[allow(non_snake_case)]
@@ -233,39 +230,21 @@ fn make_upload_req(json_payload: String) -> Result<String, UploadReqError> {
 }
 
 pub fn handle_deriv_apply(name: String, branch: String) {
-    let payload =
-        Deriv {
-            date_added: None,
-            force: None,
-            id: None,
-            branch,
-            storeHash: "".to_owned(),
-            name: if name == "$HOSTNAME" {
-                String::from_utf8_lossy(
+    let name = if name == "$HOSTNAME" {
+        String::from_utf8_lossy(
             &Command::new("hostname")
                 .output()
                 .expect("Could not run `hostname`(unix? command), consider adding --name manually.")
                 .stdout
-                .trim_ascii_end()
-        ).into_owned()
-            } else {
-                name
-            },
-        };
-    println!("INFO: name set as: {}", payload.name);
-    let json_payload =
-        serde_json::to_string(&payload).expect("Failed to serialize payload to json.");
+                .trim_ascii_end(),
+        )
+        .into_owned()
+    } else {
+        name
+    };
+    println!("INFO: name set as: {}", name);
 
-    let client = reqwest::blocking::Client::new();
-    let response = client
-        .get(format!("{PUB_HOST}/derivations/"))
-        .body(json_payload)
-        .send()
-        .unwrap()
-        .text()
-        .unwrap();
-
-    let deriv: Deriv = serde_json::from_str(&response).unwrap();
+    let deriv = DB::query(name, branch);
 
     println!("INFO: this will be installed:");
     println!("\tname: {}", deriv.name);
