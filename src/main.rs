@@ -399,53 +399,57 @@ fn handle_date_to_dynamic_info(date: Option<DateTime<Local>>) -> ColoredString {
 struct DB {}
 impl DB {
     pub fn get_all() -> Option<Vec<deriv::Deriv>> {
-        serde_json::from_str(
-            &reqwest::blocking::get(format!("{PUB_HOST}/derivations"))
+        let output = Command::new("niks3")
+            .args(vec!["pins", "list"])
+            .stdout(Stdio::piped())
+            .output()
+            .unwrap();
+        let output_string = String::from_utf8(output.stdout)
+            .expect("Failed to parse `niks3 pins list` output to rust String(utf-8)");
+        let mut outputs: Vec<deriv::Deriv> = Vec::new();
+        for line in output_string.lines().skip(2) {
+            let mut split = line.split_whitespace();
+
+            let niks3_name = split.next().unwrap().to_string();
+            if !niks3_name.starts_with("CI.") {
+                println!("INFO  : {niks3_name}");
+                continue;
+            }
+            let name_split: Vec<&str> = niks3_name.split(".").collect();
+            let name = format!("{}.{}", name_split[1], name_split[2]);
+            let branch = name_split[3].to_string();
+
+            let store_hash = split.next().unwrap().to_string();
+
+            let date: DateTime<Local> = DateTime::parse_from_rfc3339(split.next().unwrap())
                 .unwrap()
-                .text()
-                .unwrap(),
-        )
-        .ok()
+                .into();
+
+            let deriv = deriv::Deriv {
+                name,
+                storeHash: store_hash,
+                branch,
+                force: None,
+                date_added: Some(date),
+            };
+            outputs.push(deriv);
+        }
+        Some(outputs)
     }
 
     pub fn delete(name: &String, branch: &String) -> DBResponse {
-        make_req(
-            "DELETE /derivations/",
-            Some(
-                serde_json::to_string(&deriv::Deriv {
-                    name: name.clone(),
-                    storeHash: "".to_owned(),
-                    branch: branch.clone(),
-                    force: None,
-                    date_added: None,
-                })
-                .unwrap()
-                .as_str(),
-            ),
-        )
-        .unwrap()
+        todo!()
     }
-    pub fn query(name: String, branch: String) -> deriv::Deriv {
-        let payload = deriv::Deriv {
-            date_added: None,
-            force: None,
-            branch,
-            name,
-            storeHash: "".to_owned(),
-        };
-        let json_payload =
-            serde_json::to_string(&payload).expect("Failed to serialize payload to json.");
-        let client = reqwest::blocking::Client::new();
-        let response = client
-            .get(format!("{PUB_HOST}/derivations/"))
-            .body(json_payload)
-            .send()
+    pub fn query(name: String, branch: String) -> Vec<deriv::Deriv> {
+        println!("INFO: name: \"{name}\", branch: \"{branch}\"");
+        Self::get_all()
             .unwrap()
-            .text()
-            .unwrap();
-
-        let deriv: deriv::Deriv = serde_json::from_str(&response).unwrap();
-        return deriv;
+            .into_iter()
+            .filter(|d| {
+                (name.as_str() == "_" || d.name == name)
+                    && (branch.as_str() == "_" || d.branch == branch)
+            })
+            .collect()
     }
 }
 

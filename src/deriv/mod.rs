@@ -243,7 +243,10 @@ pub fn handle_deriv_apply(name: String, branch: String) {
     };
     println!("INFO: name set as: {}", name);
 
-    let deriv = DB::query(name, branch);
+    let deriv = DB::query(name, branch)
+        .into_iter()
+        .next()
+        .expect("There was no match for this name and branch configuration!");
 
     println!("INFO: this will be installed:");
     println!("\tname: {}", deriv.name);
