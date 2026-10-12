@@ -350,6 +350,7 @@ fn pretty_print(derivations: Vec<deriv::Deriv>, curr_sys: &str) {
             info = "Running";
         }
         table.push(vec![
+            der.repo.into(),
             der.name.into(),
             der.branch.into(),
             info.to_owned().into(),
@@ -359,6 +360,7 @@ fn pretty_print(derivations: Vec<deriv::Deriv>, curr_sys: &str) {
     }
 
     table.push(vec![
+        Fonal::String("Repo".to_owned()),
         Fonal::String("Name".to_owned()),
         Fonal::String("Branch".to_owned()),
         Fonal::String("".to_owned()),
@@ -366,7 +368,7 @@ fn pretty_print(derivations: Vec<deriv::Deriv>, curr_sys: &str) {
         Fonal::String("Hash".to_owned()),
     ]);
 
-    table_print::<5>(table);
+    table_print::<6>(table);
 }
 
 // This function should
@@ -399,8 +401,7 @@ fn handle_date_to_dynamic_info(date: Option<DateTime<Local>>) -> ColoredString {
 struct DB {}
 impl DB {
     pub fn get_all() -> Option<Vec<deriv::Deriv>> {
-        let output = Command::new("niks3")
-            .args(vec!["pins", "list"])
+        let output = Command::new("niks3list")
             .stdout(Stdio::piped())
             .output()
             .unwrap();
@@ -408,25 +409,34 @@ impl DB {
             .expect("Failed to parse `niks3 pins list` output to rust String(utf-8)");
         let mut outputs: Vec<deriv::Deriv> = Vec::new();
         for line in output_string.lines().skip(2) {
-            let mut split = line.split_whitespace();
+            let mut niks3_list_split = line.split_whitespace();
 
-            let niks3_name = split.next().unwrap().to_string();
+            let niks3_name = niks3_list_split.next().unwrap().to_string();
             if !niks3_name.starts_with("CI.") {
                 println!("INFO  : {niks3_name}");
                 continue;
             }
-            let name_split: Vec<&str> = niks3_name.split(".").collect();
-            let name = format!("{}.{}", name_split[1], name_split[2]);
-            let branch = name_split[3].to_string();
+            let id_split: Vec<&str> = niks3_name.split(".").collect();
+            let split_len = niks3_name.len();
+            let repository;
+            if split_len >= 2 {
+                repository = format!("{}.{}", id_split[1], id_split[2]);
+            } else {
+                repository = "".to_string()
+            }
+            let branch = id_split.get(3).map(|x| x.to_string()).unwrap_or_default();
+            let name = id_split.get(4).map(|x| x.to_string()).unwrap_or_default();
 
-            let store_hash = split.next().unwrap().to_string();
+            let store_hash = niks3_list_split.next().unwrap().to_string();
 
-            let date: DateTime<Local> = DateTime::parse_from_rfc3339(split.next().unwrap())
-                .unwrap()
-                .into();
+            let date: DateTime<Local> =
+                DateTime::parse_from_rfc3339(niks3_list_split.next().unwrap())
+                    .unwrap()
+                    .into();
 
             let deriv = deriv::Deriv {
                 name,
+                repo: repository,
                 storeHash: store_hash,
                 branch,
                 force: None,
